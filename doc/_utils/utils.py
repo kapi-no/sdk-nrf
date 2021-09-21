@@ -16,7 +16,7 @@ _MANIFEST = Manifest.from_file(_NRF_BASE / "west.yml")
 ALL_DOCSETS = {
     "nrf": ("nRF Connect SDK", "index", "manifest"),
     "nrfx": ("nrfx", "index", "hal_nordic"),
-    "find-my": ("Apple Find My", "index", "find-my"),
+    "find-my": ("Apple Find My support for nRF Connect SDK", "index", "find-my"),
     "nrfxlib": ("nrfxlib", "README", "nrfxlib"),
     "zephyr": ("Zephyr Project", "index", "zephyr"),
     "mcuboot": ("MCUboot", "wrapper", "mcuboot"),
@@ -39,6 +39,10 @@ def get_docsets(docset: str) -> Dict[str, Tuple[str, str, str]]:
     zephyr_modules = re.split(r'[\s,;]+', environ.get("ZEPHYR_MODULE_NAMES") or "")
 
     docsets = ALL_DOCSETS.copy()
+
+    # begin temphack for find-my build
+    docsets = { "find-my" : docsets["find-my"], "kconfig" : docsets["kconfig"] }
+    # end temphack
 
     if "find-my" not in zephyr_modules:
         del docsets["find-my"]

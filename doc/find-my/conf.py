@@ -29,8 +29,8 @@ FIND_MY_BASE = utils.get_projdir("find-my")
 
 # General configuration --------------------------------------------------------
 
-project = "Apple Find My"
-copyright = "2019-2021, Nordic Semiconductor"
+project = "Find My support for nRF Connect SDK"
+copyright = "2021, Nordic Semiconductor"
 author = "Nordic Semiconductor"
 version = release = find_my_version(FIND_MY_BASE / "doc" / "releases")
 

@@ -355,6 +355,15 @@ set(NO_INDEX_KCONFIG_MODULES
 )
 
 if (${INCLUDE_FIND_MY_DOCSET})
+  # begin temphack for find-my build
+  set(INDEX_KCONFIG_MODULES "")
+  list(APPEND NO_INDEX_KCONFIG_MODULES 
+      Zephyr,${ZEPHYR_BASE}
+      nRF,${NRF_BASE}
+      nrfxlib,${ZEPHYR_NRFXLIB_MODULE_DIR}
+      "Apple Find My,${ZEPHYR_FIND_MY_MODULE_DIR}"
+  )
+  # end temphack
   list(APPEND
        INDEX_KCONFIG_MODULES
        "Apple Find My,find-my,${ZEPHYR_FIND_MY_MODULE_DIR}"
@@ -378,8 +387,11 @@ add_custom_target(
     KCONFIG_DOC_MODE=1
     ${ZEPHYR_KCONFIG_MODULES}
       ${PYTHON_EXECUTABLE}
-        ${ZEPHYR_BASE}/doc/_scripts/gen_kconfig_rest.py ${KCONFIG_RST_OUT}
-        --separate-all-index
+        # begin temphack for find-my build
+        #${ZEPHYR_BASE}/doc/_scripts/gen_kconfig_rest.py ${KCONFIG_RST_OUT}     # Disable default zephyr's script,
+        #--separate-all-index                                                   # put index into main page,
+        ${CMAKE_CURRENT_LIST_DIR}/_utils/gen_kconfig_rest.py ${KCONFIG_RST_OUT} # and use our patched script.
+        # end temphack
         --modules ${INDEX_KCONFIG_MODULES}
         --no-index-modules ${NO_INDEX_KCONFIG_MODULES}
   VERBATIM
