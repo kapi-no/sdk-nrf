@@ -36,10 +36,14 @@ See :ref:`lwm2m_lib_size` for an explanation of the library size in different sc
 
 Changes
 =======
+* The LwM2M carrier library will now request the application to handle the LTE link,
+  instead of doing so itself.
 
-*
-*
-*
+  * Removed the glue functions ``lwm2m_os_lte_link_up()``, ``lwm2m_os_lte_link_down()``, and ``lwm2m_os_lte_power_down()``.
+  * Removed the events ``LWM2M_CARRIER_EVENT_CONNECTING```, ``LWM2M_CARRIER_EVENT_CONNECTED``, ``LWM2M_CARRIER_EVENT_DISCONNECTING``, and ``LWM2M_CARRIER_EVENT_DISCONNECTED``.
+  * Added the events :c:macro:`LWM2M_CARRIER_EVENT_LTE_LINK_UP` :c:macro:`LWM2M_CARRIER_EVENT_LTE_LINK_DOWN`, and :c:macro:`LWM2M_CARRIER_EVENT_LTE_POWER_OFF`.
+* Renamed the error ``LWM2M_CARRIER_ERROR_CONNECT_FAIL`` to :c:macro:`LWM2M_CARRIER_ERROR_LTE_LINK_UP_FAIL`.
+* Renamed the error ``LWM2M_CARRIER_ERROR_DISCONNECT_FAIL`` to :c:macro:`LWM2M_CARRIER_ERROR_LTE_LINK_DOWN_FAIL`.
 
 liblwm2m_carrier 0.22.0
 ***********************

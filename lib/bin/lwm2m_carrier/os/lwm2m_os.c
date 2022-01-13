@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Nordic Semiconductor ASA
+ * Copyright (c) 2019-2022 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
@@ -328,9 +328,15 @@ int lwm2m_os_nrf_modem_init(void)
 		       CONFIG_LOG_DEFAULT_LEVEL);
 #endif /* CONFIG_LOG_RUNTIME_FILTERING */
 
+#if defined CONFIG_NRF_MODEM_LIB_SYS_INIT
+	nrf_err = nrf_modem_lib_get_init_ret();
+#else
 	nrf_err = nrf_modem_lib_init(NORMAL_MODE);
+#endif /* CONFIG_NRF_MODEM_LIB_SYS_INIT */
 
 	switch (nrf_err) {
+	case 0:
+		break;
 	case MODEM_DFU_RESULT_OK:
 		LOG_INF("Modem firmware update successful.");
 		LOG_INF("Modem will run the new firmware after reboot.");
@@ -345,12 +351,10 @@ int lwm2m_os_nrf_modem_init(void)
 		LOG_ERR("Modem firmware update failed.");
 		LOG_ERR("Fatal error.");
 		break;
-	case -1:
+	default:
 		LOG_ERR("Could not initialize modem library.");
 		LOG_ERR("Fatal error.");
 		return -EIO;
-	default:
-		break;
 	}
 
 	return nrf_err;
@@ -522,38 +526,6 @@ int lwm2m_os_download_file_size_get(size_t *size)
 }
 
 /* LTE LC module abstractions. */
-
-static void lwm2m_os_lte_event_handler(const struct lte_lc_evt *const evt)
-{
-	/* This event handler is not in use by LwM2M carrier library. */
-}
-
-int lwm2m_os_lte_link_up(void)
-{
-	int err;
-	static bool initialized;
-
-	if (!initialized) {
-		initialized = true;
-
-		err = lte_lc_init();
-		if (err) {
-			return err;
-		}
-	}
-
-	return lte_lc_connect_async(lwm2m_os_lte_event_handler);
-}
-
-int lwm2m_os_lte_link_down(void)
-{
-	return lte_lc_offline();
-}
-
-int lwm2m_os_lte_power_down(void)
-{
-	return lte_lc_power_off();
-}
 
 int32_t lwm2m_os_lte_mode_get(void)
 {

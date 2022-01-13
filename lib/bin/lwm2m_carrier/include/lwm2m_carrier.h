@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Nordic Semiconductor ASA
+ * Copyright (c) 2019-2022 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
@@ -26,16 +26,16 @@ extern "C" {
  * @name LwM2M carrier library events.
  * @{
  */
-/** Modem library initialized. */
-#define LWM2M_CARRIER_EVENT_MODEM_INIT	  1
-/** Connecting to the LTE network. */
-#define LWM2M_CARRIER_EVENT_CONNECTING	  2
-/** Connected to the LTE network. */
-#define LWM2M_CARRIER_EVENT_CONNECTED	  3
-/** Disconnecting from the LTE network. */
-#define LWM2M_CARRIER_EVENT_DISCONNECTING 4
-/** Disconnected from the LTE network. */
-#define LWM2M_CARRIER_EVENT_DISCONNECTED  5
+/** Carrier library initialized. */
+#define LWM2M_CARRIER_EVENT_CARRIER_INIT  1
+/** Request connect to the LTE network. */
+#define LWM2M_CARRIER_EVENT_LTE_LINK_UP	  2
+/** Request disconnect from the LTE network.
+ *  The link must be offline until a subsequent LWM2M_CARRIER_EVENT_LTE_LINK_UP event.
+ */
+#define LWM2M_CARRIER_EVENT_LTE_LINK_DOWN 3
+/** Request power off LTE network. */
+#define LWM2M_CARRIER_EVENT_LTE_POWER_OFF 4
 /** LwM2M carrier bootstrapped. */
 #define LWM2M_CARRIER_EVENT_BOOTSTRAPPED  6
 /** LwM2M carrier registered. */
@@ -121,9 +121,9 @@ typedef struct {
 /** No error. */
 #define LWM2M_CARRIER_ERROR_NO_ERROR		0
 /** Failed to connect to the LTE network. */
-#define LWM2M_CARRIER_ERROR_CONNECT_FAIL	1
+#define LWM2M_CARRIER_ERROR_LTE_LINK_UP_FAIL	1
 /** Failed to disconnect from the LTE network. */
-#define LWM2M_CARRIER_ERROR_DISCONNECT_FAIL	2
+#define LWM2M_CARRIER_ERROR_LTE_LINK_DOWN_FAIL	2
 /** LwM2M carrier bootstrap failed. */
 #define LWM2M_CARRIER_ERROR_BOOTSTRAP		3
 /** Update package rejected. */
@@ -138,6 +138,8 @@ typedef struct {
 #define LWM2M_CARRIER_ERROR_FOTA_FAIL		8
 /** Illegal object configuration detected. */
 #define LWM2M_CARRIER_ERROR_CONFIGURATION	9
+/** LwM2M carrier init failed. */
+#define LWM2M_CARRIER_ERROR_INIT		10
 /** @} */
 
 /**

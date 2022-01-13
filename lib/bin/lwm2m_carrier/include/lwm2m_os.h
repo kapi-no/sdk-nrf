@@ -514,23 +514,6 @@ int lwm2m_os_download_start(const char *file, size_t from);
 int lwm2m_os_download_file_size_get(size_t *size);
 
 /**
- * @brief Initialize and make a connection with the modem.
- *
- * @retval  0      If success.
- */
-int lwm2m_os_lte_link_up(void);
-
-/**
- * @brief Set the modem to offline mode.
- */
-int lwm2m_os_lte_link_down(void);
-
-/**
- * @brief Set the modem to power off mode.
- */
-int lwm2m_os_lte_power_down(void);
-
-/**
  * @brief get system mode from modem.
  *
  * @retval LWM2M_OS_LTE_MODE_NONE    Not connected

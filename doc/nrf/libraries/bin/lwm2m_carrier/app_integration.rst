@@ -32,6 +32,9 @@ It provides an abstraction of the following modules:
 
 The OS abstraction layer is fully implemented for the |NCS|, and it would have to be ported if used with other RTOS or on other systems.
 
+LwM2M carrier library configuration
+***********************************
+
 To run the library in an application, you must implement the application with the API of the library.
 You can enable the module using the :kconfig:`CONFIG_LWM2M_CARRIER` Kconfig option.
 
@@ -115,9 +118,9 @@ Following are the various LwM2M carrier library events:
     See :ref:`lwm2m_carrier` sample for an example of how these certificates are written to the modem using :ref:`modem_key_mgmt` library.
     The LwM2M carrier library will apply these certificates during certain out-of-band FOTA operations.
 
-* :c:macro:`LWM2M_CARRIER_EVENT_CONNECTING`, :c:macro:`LWM2M_CARRIER_EVENT_CONNECTED`, :c:macro:`LWM2M_CARRIER_EVENT_DISCONNECTING`, :c:macro:`LWM2M_CARRIER_EVENT_DISCONNECTED`:
+* :c:macro:`LWM2M_CARRIER_EVENT_LTE_LINK_DOWN`, :c:macro:`LWM2M_CARRIER_EVENT_LTE_LINK_UP`:
 
-  * These events indicate that the device is connecting to or disconnecting from the LTE network.
+  * These events indicate that the device is must connect to, or disconnect from, the LTE network.
     They occur during the bootstrapping process, startup, and during FOTA.
 
 * :c:macro:`LWM2M_CARRIER_EVENT_BOOTSTRAPPED`:
@@ -127,8 +130,9 @@ Following are the various LwM2M carrier library events:
 
 * :c:macro:`LWM2M_CARRIER_EVENT_LTE_READY`:
 
-  * This event indicates that the device is registered to the LTE network (home or roaming).
-  * The bootstrap sequence is complete, and the application can use the LTE link.
+  * This event indicates that the application can proceed or begin its normal operation.
+  * The bootstrap sequence is complete, and the application can use the LTE link without being interrupted by :c:macro:`LWM2M_CARRIER_EVENT_LTE_LINK_DOWN` and :c:macro:`LWM2M_CARRIER_EVENT_LTE_LINK_UP` events.
+  * In cases where the bootstrap was deferred, the :c:macro:`LWM2M_CARRIER_EVENT_LTE_READY` event will will still trigger so that the application can proceed with normal operation. In this case, link up/down events can happen at a later time.
 
 * :c:macro:`LWM2M_CARRIER_EVENT_REGISTERED`:
 

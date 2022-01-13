@@ -26,10 +26,11 @@ Below are some of the requirements and limitations of the application while runn
 
 * If the application wants to use eDRX, it must enable mode 2, since the LwM2M carrier library requires the unsolicited result code.
 
-* The LwM2M carrier library controls the LTE link.
+* The application must respect the LwM2M carrier library requests to connect and disconnect from the network.
 
    * The LwM2M carrier library stores keys into the modem, which requires disconnecting from the LTE link and connecting to it.
-   * The application must wait for the :c:macro:`LWM2M_CARRIER_EVENT_LTE_READY` event before using the LTE link.
+   * The events to indicate disconnection and connection are :c:macro:`LWM2M_CARRIER_EVENT_LTE_LINK_DOWN` and :c:macro:`LWM2M_CARRIER_EVENT_LTE_LINK_UP`.
+   * The event :c:macro:`LWM2M_CARRIER_EVENT_LTE_READY` indicates that the LwM2M carrier library will not send link up/down requests. See :ref:`lwm2m_events` for more information on the events.
 
 * The LwM2M carrier library uses the TLS socket for FOTA.
 
