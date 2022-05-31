@@ -23,6 +23,7 @@
 #include <bluetooth/gatt_dm.h>
 #include <bluetooth/scan.h>
 #include <bluetooth/services/bas_client.h>
+#include <bluetooth/services/lbs.h>
 #include <dk_buttons_and_leds.h>
 
 #include <zephyr/settings/settings.h>
@@ -36,10 +37,6 @@
 
 
 static struct bt_conn *default_conn;
-static struct bt_bas_client bas;
-
-static void notify_battery_level_cb(struct bt_bas_client *bas,
-				    uint8_t battery_level);
 
 static void scan_filter_match(struct bt_scan_device_info *device_info,
 			      struct bt_scan_filter_match *filter_match,
@@ -100,30 +97,16 @@ static void discovery_completed_cb(struct bt_gatt_dm *dm,
 
 	bt_gatt_dm_data_print(dm);
 
-	err = bt_bas_handles_assign(dm, &bas);
-	if (err) {
-		printk("Could not init BAS client object, error: %d\n", err);
-	}
-
-	if (bt_bas_notify_supported(&bas)) {
-		err = bt_bas_subscribe_battery_level(&bas,
-						     notify_battery_level_cb);
-		if (err) {
-			printk("Cannot subscribe to BAS value notification "
-				"(err: %d)\n", err);
-			/* Continue anyway */
-		}
-	} else {
-		err = bt_bas_start_per_read_battery_level(
-			&bas, BAS_READ_VALUE_INTERVAL, notify_battery_level_cb);
-		if (err) {
-			printk("Could not start periodic read of BAS value\n");
-		}
-	}
-
 	err = bt_gatt_dm_data_release(dm);
 	if (err) {
 		printk("Could not release the discovery data, error "
+		       "code: %d\n", err);
+		return;
+	}
+
+	err = bt_gatt_dm_continue(dm, NULL);
+	if (err) {
+		printk("Could not continue the discovery, error "
 		       "code: %d\n", err);
 	}
 }
@@ -155,7 +138,7 @@ static void gatt_discover(struct bt_conn *conn)
 		return;
 	}
 
-	err = bt_gatt_dm_start(conn, BT_UUID_BAS, &discovery_cb, NULL);
+	err = bt_gatt_dm_start(conn, NULL, &discovery_cb, NULL);
 	if (err) {
 		printk("Could not start the discovery procedure, error "
 		       "code: %d\n", err);
@@ -188,12 +171,7 @@ static void connected(struct bt_conn *conn, uint8_t conn_err)
 
 	printk("Connected: %s\n", addr);
 
-	err = bt_conn_set_security(conn, BT_SECURITY_L2);
-	if (err) {
-		printk("Failed to set security: %d\n", err);
-
-		gatt_discover(conn);
-	}
+	gatt_discover(conn);
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
@@ -219,27 +197,9 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 	}
 }
 
-static void security_changed(struct bt_conn *conn, bt_security_t level,
-			     enum bt_security_err err)
-{
-	char addr[BT_ADDR_LE_STR_LEN];
-
-	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
-
-	if (!err) {
-		printk("Security changed: %s level %u\n", addr, level);
-	} else {
-		printk("Security failed: %s level %u err %d\n", addr, level,
-			err);
-	}
-
-	gatt_discover(conn);
-}
-
 BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.connected = connected,
 	.disconnected = disconnected,
-	.security_changed = security_changed
 };
 
 static void scan_init(void)
@@ -255,7 +215,7 @@ static void scan_init(void)
 	bt_scan_init(&scan_init);
 	bt_scan_cb_register(&scan_cb);
 
-	err = bt_scan_filter_add(BT_SCAN_FILTER_TYPE_UUID, BT_UUID_BAS);
+	err = bt_scan_filter_add(BT_SCAN_FILTER_TYPE_UUID, BT_UUID_LBS);
 	if (err) {
 		printk("Scanning filters cannot be set (err %d)\n", err);
 
@@ -268,106 +228,21 @@ static void scan_init(void)
 	}
 }
 
-static void notify_battery_level_cb(struct bt_bas_client *bas,
-				    uint8_t battery_level)
-{
-	char addr[BT_ADDR_LE_STR_LEN];
-
-	bt_addr_le_to_str(bt_conn_get_dst(bt_bas_conn(bas)),
-			  addr, sizeof(addr));
-	if (battery_level == BT_BAS_VAL_INVALID) {
-		printk("[%s] Battery notification aborted\n", addr);
-	} else {
-		printk("[%s] Battery notification: %"PRIu8"%%\n",
-		       addr, battery_level);
-	}
-}
-
-static void read_battery_level_cb(struct bt_bas_client *bas,
-				  uint8_t battery_level,
-				  int err)
-{
-	char addr[BT_ADDR_LE_STR_LEN];
-
-	bt_addr_le_to_str(bt_conn_get_dst(bt_bas_conn(bas)),
-			  addr, sizeof(addr));
-	if (err) {
-		printk("[%s] Battery read ERROR: %d\n", addr, err);
-		return;
-	}
-
-	printk("[%s] Battery read: %"PRIu8"%%\n", addr, battery_level);
-}
-
-static void button_readval(void)
-{
-	int err;
-
-	printk("Reading BAS value:\n");
-	err = bt_bas_read_battery_level(&bas, read_battery_level_cb);
-	if (err) {
-		printk("BAS read call error: %d\n", err);
-	}
-}
-
 
 static void button_handler(uint32_t button_state, uint32_t has_changed)
 {
 	uint32_t button = button_state & has_changed;
 
 	if (button & KEY_READVAL_MASK) {
-		button_readval();
+		bt_conn_disconnect(default_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
 	}
 }
-
-
-static void auth_cancel(struct bt_conn *conn)
-{
-	char addr[BT_ADDR_LE_STR_LEN];
-
-	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
-
-	printk("Pairing cancelled: %s\n", addr);
-}
-
-
-static void pairing_complete(struct bt_conn *conn, bool bonded)
-{
-	char addr[BT_ADDR_LE_STR_LEN];
-
-	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
-
-	printk("Pairing completed: %s, bonded: %d\n", addr, bonded);
-}
-
-
-static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
-{
-	char addr[BT_ADDR_LE_STR_LEN];
-
-	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
-
-	printk("Pairing failed conn: %s, reason %d\n", addr, reason);
-}
-
-
-static struct bt_conn_auth_cb conn_auth_callbacks = {
-	.cancel = auth_cancel,
-};
-
-static struct bt_conn_auth_info_cb conn_auth_info_callbacks = {
-	.pairing_complete = pairing_complete,
-	.pairing_failed = pairing_failed
-};
-
 
 void main(void)
 {
 	int err;
 
-	printk("Starting Bluetooth Central BAS example\n");
-
-	bt_bas_client_init(&bas);
+	printk("Starting Bluetooth Central LBS example\n");
 
 	err = bt_enable(NULL);
 	if (err) {
@@ -382,18 +257,6 @@ void main(void)
 	}
 
 	scan_init();
-
-	err = bt_conn_auth_cb_register(&conn_auth_callbacks);
-	if (err) {
-		printk("Failed to register authorization callbacks.\n");
-		return;
-	}
-
-	err = bt_conn_auth_info_cb_register(&conn_auth_info_callbacks);
-	if (err) {
-		printk("Failed to register authorization info callbacks.\n");
-		return;
-	}
 
 	err = dk_buttons_init(button_handler);
 	if (err) {
