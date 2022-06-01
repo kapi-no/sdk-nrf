@@ -9,6 +9,7 @@
 #include <zephyr/logging/log.h>
 
 #include <bluetooth/gatt_dm.h>
+#include <bluetooth/host/conn_internal.h>
 
 LOG_MODULE_REGISTER(bt_gatt_dm, CONFIG_BT_GATT_DM_LOG_LEVEL);
 
@@ -631,6 +632,9 @@ int bt_gatt_dm_start(struct bt_conn *conn,
 	dm->cur_chunk_len = 0;
 	dm->search_svc_by_uuid = (svc_uuid != NULL);
 
+	printk("bt_gatt_dm_start: dm->conn: 0x%08X\n", (uint32_t) dm->conn);
+	printk("bt_gatt_dm_start: conn->state: %d\n", dm->conn->state);
+
 	if (svc_uuid) {
 		size_t uuid_size;
 
@@ -686,6 +690,9 @@ int bt_gatt_dm_continue(struct bt_gatt_dm *dm, void *context)
 	dm->discover_params.end_handle = 0xffff;
 	dm->discover_params.type = BT_GATT_DISCOVER_PRIMARY;
 	dm->discover_params.uuid = dm->search_svc_by_uuid ? &dm->svc_uuid.uuid : NULL;
+
+	printk("bt_gatt_dm_continue: dm->conn: 0x%08X\n", (uint32_t) dm->conn);
+	printk("bt_gatt_dm_continue: conn->state: %d\n", dm->conn->state);
 
 	err = bt_gatt_discover(dm->conn, &dm->discover_params);
 	if (err) {

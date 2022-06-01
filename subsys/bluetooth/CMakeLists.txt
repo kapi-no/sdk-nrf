@@ -4,6 +4,8 @@
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
+zephyr_library_include_directories(${ZEPHYR_BASE}/subsys/.)
+
 zephyr_sources_ifdef(CONFIG_BT_GATT_POOL gatt_pool.c)
 zephyr_sources_ifdef(CONFIG_BT_GATT_DM gatt_dm.c)
 zephyr_sources_ifdef(CONFIG_BT_SCAN scan.c)
