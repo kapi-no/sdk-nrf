@@ -29,8 +29,6 @@ STATS_SECT_DECL(smp_com_param) smp_com_param;
 int fmfu_mgmt_stat_init(void)
 {
 	/* Register/start the stat service */
-	stat_mgmt_register_group();
-
 	int rc = STATS_INIT_AND_REG(smp_com_param, STATS_SIZE_32, "smp_com");
 
 	STATS_INCN(smp_com_param, frame_max, SMP_UART_BUFFER_SIZE);

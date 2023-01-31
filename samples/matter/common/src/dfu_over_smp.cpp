@@ -92,8 +92,6 @@ void DFUOverSMP::Init()
 		}
 	};
 
-	os_mgmt_register_group();
-	img_mgmt_register_group();
 	mgmt_callback_register(&sUploadCallback);
 	mgmt_callback_register(&sCommandCallback);
 }
@@ -114,7 +112,6 @@ void DFUOverSMP::ConfirmNewImage()
 void DFUOverSMP::StartServer()
 {
 	VerifyOrReturn(!mIsStarted, ChipLogProgress(SoftwareUpdate, "DFU over SMP was already started"));
-	smp_bt_register();
 
 	/* Synchronize access to the advertising arbiter that normally runs on the CHIP thread. */
 	PlatformMgr().LockChipStack();

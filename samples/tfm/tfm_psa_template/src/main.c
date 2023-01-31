@@ -203,20 +203,6 @@ void main(void)
 	if (err < 0) {
 		printk("Error mounting littlefs [%d]", err);
 	}
-
-	fs_mgmt_register_group();
-#endif
-#ifdef CONFIG_MCUMGR_CMD_OS_MGMT
-	os_mgmt_register_group();
-#endif
-#ifdef CONFIG_MCUMGR_CMD_IMG_MGMT
-	img_mgmt_register_group();
-#endif
-#ifdef CONFIG_MCUMGR_CMD_STAT_MGMT
-	stat_mgmt_register_group();
-#endif
-#ifdef CONFIG_MCUMGR_CMD_SHELL_MGMT
-	shell_mgmt_register_group();
 #endif
 #ifdef CONFIG_MCUMGR_SMP_BT
 	start_smp_bluetooth();

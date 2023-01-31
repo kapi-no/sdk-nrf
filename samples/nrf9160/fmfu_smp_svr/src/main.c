@@ -37,10 +37,6 @@ void main(void)
 	nrf_modem_lib_init(FULL_DFU_MODE);
 	/* Register SMP Communication stats */
 	fmfu_mgmt_stat_init();
-	/* Registers the OS management command handler group */
-	os_mgmt_register_group();
-	/* Registers the image management command handler group */
-	img_mgmt_register_group();
 	/* Initialize MCUMgr handlers for full modem update */
 	err = fmfu_mgmt_init();
 	if (err) {
