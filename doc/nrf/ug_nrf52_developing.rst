@@ -41,8 +41,6 @@ To enable support for FOTA updates, do the following:
 * Enable the mcumgr module that handles the transport protocol over Bluetooth® Low Energy as follows:
 
   a. Enable the Kconfig options :kconfig:option:`CONFIG_MCUMGR_CMD_OS_MGMT`, :kconfig:option:`CONFIG_MCUMGR_CMD_IMG_MGMT`, and :kconfig:option:`CONFIG_MCUMGR_SMP_BT`.
-  #. Call the functions :c:func:`os_mgmt_register_group()` and :c:func:`img_mgmt_register_group()` in your application.
-  #. Call the :c:func:`smp_bt_register()` function in your application to initialize the mcumgr Bluetooth Low Energy transport.
 
   After completing these steps, your application advertises the SMP Service with ``UUID 8D53DC1D-1DB7-4CD3-868B-8A527460AA84``.
 
