@@ -15,6 +15,7 @@
 #include <app_event_manager.h>
 #include "config_event.h"
 #include "hid_event.h"
+#include "dfu_lock.h"
 #include <caf/events/ble_common_event.h>
 #include <caf/events/power_manager_event.h>
 
@@ -27,10 +28,11 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_CONFIG_CHANNEL_DFU_LOG_LEVEL);
 
 
 /* DFU state values must match with values used by the host. */
-#define DFU_STATE_INACTIVE 0x00
-#define DFU_STATE_ACTIVE   0x01
-#define DFU_STATE_STORING  0x02
-#define DFU_STATE_CLEANING 0x03
+#define DFU_STATE_INACTIVE              0x00
+#define DFU_STATE_ACTIVE_CONFIG_CHANNEL 0x01
+#define DFU_STATE_STORING               0x02
+#define DFU_STATE_CLEANING              0x03
+#define DFU_STATE_ACTIVE_OTHER          0x04
 
 
 #define FLASH_PAGE_SIZE_LOG2	12
@@ -83,6 +85,7 @@ static char sync_buffer[SYNC_BUFFER_SIZE] __aligned(4);
 
 static bool device_in_use;
 static bool is_flash_area_clean;
+static bool schedule_erase_on_dfu_start;
 
 enum dfu_opt {
 	DFU_OPT_START,
@@ -104,6 +107,18 @@ const static char * const opt_descr[] = {
 	[DFU_OPT_FWINFO] = "fwinfo",
 	[DFU_OPT_VARIANT] = OPT_DESCR_MODULE_VARIANT,
 	[DFU_OPT_DEVINFO] = "devinfo"
+};
+
+static void dfu_lock_owner_changed(const struct dfu_lock_owner *new_owner)
+{
+	LOG_DBG("Flash marked dirty due to different DFU process");
+
+	schedule_erase_on_dfu_start = true;
+}
+
+const static struct dfu_lock_owner config_channel_owner = {
+	.name = "Config Channel",
+	.owner_changed = dfu_lock_owner_changed,
 };
 
 static uint8_t dfu_slot_id(void)
@@ -161,6 +176,10 @@ static void terminate_dfu(void)
 
 	if (IS_ENABLED(CONFIG_CAF_POWER_MANAGER_EVENTS)) {
 		power_manager_restrict(MODULE_IDX(MODULE), POWER_MANAGER_LEVEL_MAX);
+	}
+
+	if (IS_ENABLED(CONFIG_DESKTOP_DFU_LOCK)) {
+		dfu_lock_release(&config_channel_owner);
 	}
 }
 
@@ -234,6 +253,11 @@ static void background_erase_handler(struct k_work *work)
 
 		flash_area_close(flash_area);
 		flash_area = NULL;
+
+		if (IS_ENABLED(CONFIG_DESKTOP_DFU_LOCK) &&
+		    !k_work_delayable_is_pending(&dfu_timeout)) {
+			dfu_lock_release(&config_channel_owner);
+		}
 	}
 }
 
@@ -370,6 +394,18 @@ static void handle_dfu_start(const uint8_t *data, const size_t size)
 		return;
 	}
 
+	if (IS_ENABLED(CONFIG_DESKTOP_DFU_LOCK) && schedule_erase_on_dfu_start) {
+		schedule_erase_on_dfu_start = false;
+
+		k_work_reschedule(&background_erase, K_NO_WAIT);
+		is_flash_area_clean = false;
+		cur_offset = 0;
+		img_length = 0;
+		img_csum = 0;
+
+		return;
+	}
+
 	if (!is_flash_area_clean) {
 		LOG_WRN("Flash is not clean yet.");
 		return;
@@ -461,12 +497,14 @@ static void handle_dfu_sync(uint8_t *data, size_t *size)
 
 	uint8_t dfu_state;
 
-	if (!is_flash_area_clean) {
+	if (IS_ENABLED(CONFIG_DESKTOP_DFU_LOCK) && !dfu_lock_owner_check(&config_channel_owner)) {
+		dfu_state = DFU_STATE_ACTIVE_OTHER;
+	} else if (!is_flash_area_clean) {
 		dfu_state = DFU_STATE_CLEANING;
 	} else if (storing_data) {
 		dfu_state = DFU_STATE_STORING;
 	} else if (dfu_active) {
-		dfu_state = DFU_STATE_ACTIVE;
+		dfu_state = DFU_STATE_ACTIVE_CONFIG_CHANNEL;
 	} else {
 		dfu_state = DFU_STATE_INACTIVE;
 	}
@@ -537,14 +575,20 @@ static void handle_reboot_request(uint8_t *data, size_t *size)
 {
 	LOG_INF("System reboot requested");
 
-	if (IS_ENABLED(CONFIG_CAF_POWER_MANAGER_EVENTS)) {
-		power_manager_restrict(MODULE_IDX(MODULE), POWER_MANAGER_LEVEL_SUSPENDED);
-	}
-
 	*size = sizeof(bool);
-	data[0] = true;
 
-	k_work_reschedule(&reboot_request, REBOOT_REQUEST_TIMEOUT);
+	if (IS_ENABLED(CONFIG_DESKTOP_DFU_LOCK) &&
+	    !dfu_lock_owner_check_and_try(&config_channel_owner)) {
+		data[0] = false;
+	} else {
+		if (IS_ENABLED(CONFIG_CAF_POWER_MANAGER_EVENTS)) {
+			power_manager_restrict(MODULE_IDX(MODULE), POWER_MANAGER_LEVEL_SUSPENDED);
+		}
+
+		data[0] = true;
+
+		k_work_reschedule(&reboot_request, REBOOT_REQUEST_TIMEOUT);
+	}
 }
 
 #if CONFIG_SECURE_BOOT
@@ -665,6 +709,11 @@ static void handle_image_info_request(uint8_t *data, size_t *size)
 static void update_config(const uint8_t opt_id, const uint8_t *data,
 			  const size_t size)
 {
+	if (IS_ENABLED(CONFIG_DESKTOP_DFU_LOCK) &&
+	    !dfu_lock_owner_check_and_try(&config_channel_owner)) {
+		return;
+	}
+
 	switch (opt_id) {
 	case DFU_OPT_DATA:
 		handle_dfu_data(data, size);
@@ -744,6 +793,11 @@ static bool app_event_handler(const struct app_event_header *aeh)
 			k_work_init_delayable(&reboot_request, reboot_request_handler);
 			k_work_init_delayable(&background_erase, background_erase_handler);
 			k_work_init_delayable(&background_store, background_store_handler);
+
+			if (IS_ENABLED(CONFIG_DESKTOP_DFU_LOCK)) {
+				bool is_ownership_changed = dfu_lock_try(&config_channel_owner);
+				__ASSERT_NO_MSG(is_ownership_changed);
+			}
 
 			k_work_reschedule(&background_erase, K_NO_WAIT);
 		}
