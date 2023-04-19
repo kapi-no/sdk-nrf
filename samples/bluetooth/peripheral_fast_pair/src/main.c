@@ -448,6 +448,12 @@ void main(void)
 		return;
 	}
 
+	err = bt_fast_pair_factory_reset();
+	if (err) {
+		LOG_ERR("bt_fast_pair_factory_reset failed (err %d)", err);
+		return;
+	}
+
 	for (;;) {
 		dk_set_led(RUN_STATUS_LED, run_led_on);
 		run_led_on = !run_led_on;
