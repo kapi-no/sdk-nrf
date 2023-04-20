@@ -1,0 +1,29 @@
+#
+# Copyright (c) 2023 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig DESKTOP_DFU_MCUMGR_ENABLE
+	bool "Enable DFU using MCUmgr"
+	select CAF_BLE_SMP_TRANSFER_EVENTS
+	select DESKTOP_DFU_LOCK
+	depends on !CAF_BLE_SMP
+	depends on MCUMGR_MGMT_NOTIFICATION_HOOKS
+	depends on MCUMGR_GRP_IMG_UPLOAD_CHECK_HOOK
+	depends on MCUMGR_GRP_IMG_STATUS_HOOKS
+	depends on MCUMGR_GRP_IMG
+	depends on MCUMGR_GRP_OS_RESET_HOOK
+	depends on MCUMGR_GRP_OS
+	depends on BOOTLOADER_MCUBOOT
+	help
+	  This option enables an alternative method of performing DFU using the
+	  MCUmgr module.
+
+if DESKTOP_DFU_MCUMGR_ENABLE
+
+module = DESKTOP_DFU_MCUMGR
+module-str = DFU MCUmgr
+source "subsys/logging/Kconfig.template.log_config"
+
+endif
