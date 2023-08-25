@@ -59,7 +59,7 @@ html_last_updated_fmt = "%b %d, %Y"
 html_show_sourcelink = True
 html_show_sphinx = False
 
-html_theme_options = {"docsets": utils.get_docsets("find-my")}
+html_theme_options = {"docset": "find-my", "docsets": utils.get_docsets("find-my")}
 
 # Options for intersphinx ------------------------------------------------------
 

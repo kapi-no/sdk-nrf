@@ -47,7 +47,6 @@ def get_docsets(docset: str) -> Dict[str, Tuple[str, str, str]]:
     if "find-my" not in zephyr_modules:
         del docsets["find-my"]
 
-    del docsets[docset]
     return docsets
 
 
