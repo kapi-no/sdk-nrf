@@ -1,3 +1,7 @@
 :root {
     --docset-color: #00a9ce;
 }
+
+.ncs-btn-versions {
+    display: none !important;
+}
