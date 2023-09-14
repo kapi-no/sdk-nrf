@@ -7,15 +7,40 @@ import sys
 
 # Utility function -------------------------------------------------------------
 
-def find_my_version(releases_dir):
-    files = os.listdir(releases_dir)
-    versions_str = [re.match(r".*-(.*)\.", x)[1]
-                    for x in files if re.match(r"release-notes-.*\.rst$", x)]
+def find_my_version_cs(versions_str):
+    if "latest-cs" in versions_str:
+        return "latest-cs"
+
+    versions_str_filtered = [x for x in versions_str
+                             if ("cs" in x) and ("latest" not in x)]
+    versions_str_filtered.sort(reverse=True)
+
+    if len(versions_str_filtered) > 0:
+        return versions_str_filtered[0]
+    else:
+        return "latest-cs"
+
+def find_my_version_standard(versions_str):
     if "latest" in versions_str:
         return "latest"
+
     versions_num = [tuple(int(y) for y in x.split('.')) for x in versions_str]
     versions_num.sort(reverse=True)
+
     return ".".join(str(x) for x in versions_num[0])
+
+def find_my_version(releases_dir):
+    files = os.listdir(releases_dir)
+    versions_str = [re.match(r"release-notes-(.*)\.rst$", x)[1]
+                    for x in files if re.match(r"release-notes-.*\.rst$", x)]
+
+    # Check if we are in the CS release context.
+    is_cs_context = any(re.search(r"cs", version) for version in versions_str)
+
+    if is_cs_context:
+        return find_my_version_cs(versions_str)
+    else:
+        return find_my_version_standard(versions_str)
 
 # Paths ------------------------------------------------------------------------
 
