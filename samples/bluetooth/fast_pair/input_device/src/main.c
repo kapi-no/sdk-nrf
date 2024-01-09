@@ -8,6 +8,7 @@
 #include <zephyr/sys/__assert.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/services/hrs.h>
 #include <zephyr/settings/settings.h>
 #include <bluetooth/services/fast_pair.h>
 #include <bluetooth/adv_prov/fast_pair.h>
@@ -333,6 +334,19 @@ static void fp_account_key_written(struct bt_conn *conn)
 	LOG_INF("Fast Pair Account Key has been written");
 }
 
+static void hrs_notify(void)
+{
+	static uint8_t heartrate = 90U;
+
+	/* Heartrate measurements simulation */
+	heartrate++;
+	if (heartrate == 160U) {
+		heartrate = 90U;
+	}
+
+	bt_hrs_notify(heartrate);
+}
+
 int main(void)
 {
 	bool run_led_on = true;
@@ -422,5 +436,8 @@ int main(void)
 		dk_set_led(RUN_STATUS_LED, run_led_on);
 		run_led_on = !run_led_on;
 		k_sleep(K_MSEC(RUN_LED_BLINK_INTERVAL_MS));
+
+		/* Heartrate measurements simulation */
+		hrs_notify();
 	}
 }
