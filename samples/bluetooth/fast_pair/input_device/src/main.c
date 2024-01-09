@@ -18,7 +18,6 @@
 LOG_MODULE_REGISTER(fp_sample, LOG_LEVEL_INF);
 
 #include "bt_adv_helper.h"
-#include "hids_helper.h"
 #include "battery_module.h"
 
 #define RUN_STATUS_LED						DK_LED1
@@ -270,72 +269,6 @@ static enum bt_security_err pairing_accept(struct bt_conn *conn,
 	return ret;
 }
 
-static const char *volume_change_to_str(enum hids_helper_volume_change volume_change)
-{
-	const char *res = NULL;
-
-	switch (volume_change) {
-	case HIDS_HELPER_VOLUME_CHANGE_DOWN:
-		res = "Decrease";
-		break;
-
-	case HIDS_HELPER_VOLUME_CHANGE_NONE:
-		break;
-
-	case HIDS_HELPER_VOLUME_CHANGE_UP:
-		res = "Increase";
-		break;
-
-	default:
-		/* Should not happen. */
-		__ASSERT_NO_MSG(false);
-		break;
-	}
-
-	return res;
-}
-
-static void hid_volume_control_send(enum hids_helper_volume_change volume_change)
-{
-	const char *operation_str = volume_change_to_str(volume_change);
-	int err = hids_helper_volume_ctrl(volume_change);
-
-	if (!err) {
-		if (operation_str) {
-			LOG_INF("%s audio volume", operation_str);
-		}
-	} else {
-		/* HID host not connected or not subscribed. Silently drop HID data. */
-	}
-}
-
-static void volume_control_btn_handle(uint32_t button_state, uint32_t has_changed)
-{
-	static enum hids_helper_volume_change volume_change = HIDS_HELPER_VOLUME_CHANGE_NONE;
-	enum hids_helper_volume_change new_volume_change = volume_change;
-
-	if (has_changed & VOLUME_UP_BUTTON_MASK) {
-		if (button_state & VOLUME_UP_BUTTON_MASK) {
-			new_volume_change = HIDS_HELPER_VOLUME_CHANGE_UP;
-		} else if (volume_change == HIDS_HELPER_VOLUME_CHANGE_UP) {
-			new_volume_change = HIDS_HELPER_VOLUME_CHANGE_NONE;
-		}
-	}
-
-	if (has_changed & VOLUME_DOWN_BUTTON_MASK) {
-		if (button_state & VOLUME_DOWN_BUTTON_MASK) {
-			new_volume_change = HIDS_HELPER_VOLUME_CHANGE_DOWN;
-		} else if (volume_change == HIDS_HELPER_VOLUME_CHANGE_DOWN) {
-			new_volume_change = HIDS_HELPER_VOLUME_CHANGE_NONE;
-		}
-	}
-
-	if (volume_change != new_volume_change) {
-		volume_change = new_volume_change;
-		hid_volume_control_send(volume_change);
-	}
-}
-
 static void fp_adv_mode_btn_handle(uint32_t button_state, uint32_t has_changed)
 {
 	uint32_t button_pressed = button_state & has_changed;
@@ -392,7 +325,6 @@ static void button_changed(uint32_t button_state, uint32_t has_changed)
 	__ASSERT_NO_MSG(!k_is_preempt_thread());
 
 	fp_adv_mode_btn_handle(button_state, has_changed);
-	volume_control_btn_handle(button_state, has_changed);
 	bond_remove_btn_handle(button_state, has_changed);
 }
 
@@ -432,12 +364,6 @@ int main(void)
 	err = bt_fast_pair_info_cb_register(&fp_info_callbacks);
 	if (err) {
 		LOG_ERR("Registering Fast Pair info callbacks failed (err %d)", err);
-		return 0;
-	}
-
-	err = hids_helper_init();
-	if (err) {
-		LOG_ERR("HIDS init failed (err %d)", err);
 		return 0;
 	}
 
