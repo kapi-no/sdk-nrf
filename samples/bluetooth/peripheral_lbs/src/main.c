@@ -194,11 +194,11 @@ int main(void)
 		return 0;
 	}
 
-	err = init_button();
-	if (err) {
-		printk("Button init failed (err %d)\n", err);
-		return 0;
-	}
+	// err = init_button();
+	// if (err) {
+	// 	printk("Button init failed (err %d)\n", err);
+	// 	return 0;
+	// }
 
 	if (IS_ENABLED(CONFIG_BT_LBS_SECURITY_ENABLED)) {
 		err = bt_conn_auth_cb_register(&conn_auth_callbacks);
