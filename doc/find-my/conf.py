@@ -7,7 +7,7 @@ import sys
 
 # Utility function -------------------------------------------------------------
 
-def find_my_version_cs(versions_str):
+def find_my_version_ncs_next(versions_str):
     if "latest-cs" in versions_str:
         return "latest-cs"
 
@@ -20,7 +20,7 @@ def find_my_version_cs(versions_str):
     else:
         return "latest-cs"
 
-def find_my_version_standard(versions_str):
+def find_my_version_ncs(versions_str):
     if "latest" in versions_str:
         return "latest"
 
@@ -30,17 +30,19 @@ def find_my_version_standard(versions_str):
     return ".".join(str(x) for x in versions_num[0])
 
 def find_my_version(releases_dir):
+    NCS_NEXT_CONTEXT_FILE = "ncs_next_context.file"
+
     files = os.listdir(releases_dir)
     versions_str = [re.match(r"release-notes-(.*)\.rst$", x)[1]
                     for x in files if re.match(r"release-notes-.*\.rst$", x)]
 
-    # Check if we are in the CS release context.
-    is_cs_context = any(re.search(r"cs", version) for version in versions_str)
+    # Check if we are in the NCS next context.
+    is_ncs_next_context = NCS_NEXT_CONTEXT_FILE in files
 
-    if is_cs_context:
-        return find_my_version_cs(versions_str)
+    if is_ncs_next_context:
+        return find_my_version_ncs_next(versions_str)
     else:
-        return find_my_version_standard(versions_str)
+        return find_my_version_ncs(versions_str)
 
 # Paths ------------------------------------------------------------------------
 
