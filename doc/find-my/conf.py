@@ -24,10 +24,12 @@ def find_my_version_ncs(versions_str):
     if "latest" in versions_str:
         return "latest"
 
-    versions_num = [tuple(int(y) for y in x.split('.')) for x in versions_str]
-    versions_num.sort(reverse=True)
+    versions_str.sort(reverse=True)
 
-    return ".".join(str(x) for x in versions_num[0])
+    if len(versions_str) > 0:
+        return versions_str[0]
+    else:
+        return "latest"
 
 def find_my_version(releases_dir):
     NCS_NEXT_CONTEXT_FILE = "ncs_next_context.file"
