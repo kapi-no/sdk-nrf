@@ -460,10 +460,6 @@ Bluetooth samples
 
 * Updated the Bluetooth samples that used the :ref:`zephyr:bluetooth-hci-ipc-sample` radio core firmware so that now they use the :ref:`ipc_radio`.
 
-* :ref:`fast_pair_input_device` sample:
-
-  * Added support for the :ref:`nRF54L15 PDK <ug_nrf54l15_gs>` board.
-
 * :ref:`peripheral_lbs` sample:
 
   * Added support for the :ref:`zephyr:nrf54h20dk_nrf54h20` and :ref:`zephyr:nrf54l15pdk_nrf54l15` boards.
@@ -554,6 +550,20 @@ Bluetooth samples
 * :ref:`shell_bt_nus` sample:
 
   * Added support for the :ref:`zephyr:nrf54h20dk_nrf54h20` board.
+
+Bluetooth Fast Pair samples
+---------------------------
+
+* Moved the :ref:`fast_pair_input_device` sample to the :ref:`bt_fast_pair_samples` category.
+
+* :ref:`fast_pair_input_device` sample:
+
+  * Added support for the :ref:`nRF54L15 PDK <ug_nrf54l15_gs>` board.
+  * Replaced the :ref:`zephyr:bluetooth-hci-ipc-sample` radio core firmware with the :ref:`ipc_radio`.
+  * Removed unnecessary :kconfig:option:`CONFIG_HEAP_MEM_POOL_SIZE` Kconfig configuration.
+
+* Added :ref:`fast_pair_locator_tag` sample to demonstrate support for the locator tag use case and the Find My Device Network (FMDN) extension.
+  The new sample supports the debug build configuration (the default option) and the release build configuration (available with the ``release`` file suffix).
 
 Bluetooth Mesh samples
 ----------------------
@@ -950,7 +960,24 @@ Bluetooth libraries and services
 
 * :ref:`bt_fast_pair_readme` library:
 
-  * Added experimental support for a new cryptographical backend that relies on the PSA crypto APIs (:kconfig:option:`CONFIG_BT_FAST_PAIR_CRYPTO_PSA`).
+  * Added:
+
+    * Support for the FMDN extension (:kconfig:option:`CONFIG_BT_FAST_PAIR_FMDN`).
+    * The :kconfig:option:`CONFIG_BT_FAST_PAIR_STORAGE_AK_BACKEND` Kconfig option to select the Account Key storage backend and introduced the new minimal backend for Account Key storage.
+      The new backend (:kconfig:option:`CONFIG_BT_FAST_PAIR_STORAGE_AK_BACKEND_MINIMAL`) is dedicated for the locator tag use case and supports the Owner Account Key functionality required by the FMDN extension.
+      The old backend (:kconfig:option:`CONFIG_BT_FAST_PAIR_STORAGE_AK_BACKEND_STANDARD`) is used in the input device use case.
+    * The Beacon Clock storage unit used with the FMDN extension.
+    * The Ephemeral Identity Key (EIK) storage unit used with the FMDN extension.
+    * Support for AES-ECB-256, SECP160R1, and SECP256R1 cryptographic operations to the Oberon crypto backend (:kconfig:option:`CONFIG_BT_FAST_PAIR_CRYPTO_OBERON`) that are used in the FMDN extension.
+    * Experimental support for a new cryptographical backend that relies on the PSA crypto APIs (:kconfig:option:`CONFIG_BT_FAST_PAIR_CRYPTO_PSA`).
+    * The :kconfig:option:`CONFIG_BT_FAST_PAIR_REQ_PAIRING` Kconfig option to provide the possibility to skip the Bluetooth pairing and bonding phase during the Fast Pair procedure.
+      This option must be disabled in the Fast Pair locator tag use case due to its requirements.
+    * The :kconfig:option:`CONFIG_BT_FAST_PAIR_GATT_SERVICE_MODEL_ID` Kconfig option to provide the possibility to remove the Model ID characteristic from the Fast Pair service.
+      This option must be disabled in the Fast Pair locator tag use case due to its requirements.
+    * An UUID definition of the FMDN Beacon Actions characteristic to the Fast Pair UUID header (:file:`bluetooth/services/fast_pair/uuid.h`).
+    * The experimental status (:kconfig:option:`CONFIG_EXPERIMENTAL`) to the :kconfig:option:`CONFIG_BT_FAST_PAIR_PN` Kconfig option, which is used to enable Fast Pair Personalized Name extension.
+
+  * Removed the experimental status (:kconfig:option:`CONFIG_EXPERIMENTAL`) from :kconfig:option:`CONFIG_BT_FAST_PAIR` Kconfig option, which is the main Fast Pair configuration option.
 
 Debug libraries
 ---------------
@@ -1115,6 +1142,8 @@ Other libraries
 
 * Added the :ref:`lib_uart_async_adapter` library.
 
+* Added the :ref:`dult_readme` library with the experimental maturity level.
+
 * :ref:`app_event_manager` library:
 
   * Added the :kconfig:option:`CONFIG_APP_EVENT_MANAGER_REBOOT_ON_EVENT_ALLOC_FAIL` Kconfig option.
@@ -1197,6 +1226,7 @@ Documentation
   * List of :ref:`debugging_tools` on the :ref:`debugging` page.
   * Recommendation for the use of a :file:`VERSION` file for :ref:`ug_fw_update_image_versions_mcuboot` in the :ref:`ug_fw_update_image_versions` user guide.
   * The :ref:`ug_coremark` page.
+  * The :ref:`ug_dult` guide.
   * The :ref:`bt_mesh_models_common_blocking_api_rule` section to the :ref:`bt_mesh_models_overview` page.
   * Steps for nRF54 devices across all supported samples to reflect the new button and LED numbering on the nRF54H20 DK and the nRF54L15 PDK.
   * :ref:`Software Updates for Internet of Things (SUIT) documentation <ug_nrf54h20_suit_dfu>` in :ref:`ug_nrf54h`:
@@ -1231,6 +1261,10 @@ Documentation
   * The trusted storage support table in the :ref:`trusted_storage_in_ncs` section by adding nRF52833 and replacing nRF9160 with nRF91 Series.
   * The :ref:`ug_nrf52_developing` and :ref:`ug_nrf5340` by adding notes about how to perform FOTA updates with samples using random HCI identities, some specifically relevant when using the iOS app.
   * Reworked the :ref:`ble_rpc` page to be more informative and aligned with the library template.
+  * The :ref:`bt_fast_pair_readme` page to document support for the FMDN extension and aligned the page with the sysbuild migration.
+  * The :ref:`ug_bt_fast_pair` integration to document integration steps for the FMDN extension, the locator tag use case, and aligned the page with the sysbuild migration.
+  * The :ref:`software_maturity` page to add the new Ecosystem category.
+    In the new category, defined software maturity levels for Google Fast Pair use cases and features supported in |NCS|.
   * Improved the :ref:`ug_radio_fem` user guide to be up-to-date and more informative.
 
 * Fixed:
