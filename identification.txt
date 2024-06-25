@@ -1,0 +1,5 @@
+If you are testing with the development kit, briefly press Button 4.
+You should see LED 4 blink every 0.5 seconds, indicating that identification mode is active.
+
+If you are testing with the Thingy platform, press and hold the only button until you hear two short beeps (between 3 and 5 seconds).
+You should see the RGB LED blinking yellow, indicating that identification mode is active.
