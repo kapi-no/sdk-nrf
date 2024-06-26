@@ -64,9 +64,18 @@ static int check_adv_config_range(struct bt_fast_pair_adv_config fp_adv_config)
 }
 
 static size_t bt_fast_pair_adv_data_size_non_discoverable(size_t account_key_cnt,
-						enum bt_fast_pair_adv_battery_mode adv_battery_mode)
+				const struct bt_fast_pair_not_disc_adv_info *not_disc_adv_info)
 {
 	size_t res = 0;
+
+	if (!IS_ENABLED(CONFIG_BT_FAST_PAIR_SUBSEQUENT_PAIRING) &&
+	    not_disc_adv_info->type == BT_FAST_PAIR_NOT_DISC_ADV_TYPE_SHOW_UI_IND) {
+		LOG_WRN("Cannot use not discoverable advertising with UI indications "
+			"without support for the Subsequent Pairing feature. Enable "
+			"the CONFIG_BT_FAST_PAIR_SUBSEQUENT_PAIRING Kconfig to use this mode");
+
+		return 0;
+	}
 
 	res += sizeof(version_and_flags);
 
@@ -82,7 +91,8 @@ static size_t bt_fast_pair_adv_data_size_non_discoverable(size_t account_key_cnt
 		res += sizeof(salt);
 	}
 
-	if ((adv_battery_mode != BT_FAST_PAIR_ADV_BATTERY_MODE_NONE) && (account_key_cnt != 0)) {
+	if ((not_disc_adv_info->battery_mode != BT_FAST_PAIR_ADV_BATTERY_MODE_NONE) &&
+	    (account_key_cnt != 0)) {
 		res += FP_CRYPTO_BATTERY_INFO_LEN;
 	}
 
@@ -123,7 +133,7 @@ size_t bt_fast_pair_adv_data_size(struct bt_fast_pair_adv_config fp_adv_config)
 		res += bt_fast_pair_adv_data_size_discoverable();
 	} else {
 		res += bt_fast_pair_adv_data_size_non_discoverable(account_key_cnt,
-							fp_adv_config.not_disc.battery_mode);
+							&fp_adv_config.not_disc);
 	}
 
 	return res;
