@@ -1474,7 +1474,7 @@ static uint8_t bt_gatt_subscribe_params_notify(struct bt_conn *conn,
 	return result;
 }
 
-static void bt_gatt_subscribe_params_write(struct bt_conn *conn, uint8_t err,
+static void bt_gatt_subscribe_params_subscribe(struct bt_conn *conn, uint8_t err,
 					   struct bt_gatt_write_params *params,
 					   uint32_t callback_slot)
 {
@@ -1503,11 +1503,11 @@ static void bt_gatt_subscribe_params_write(struct bt_conn *conn, uint8_t err,
 	}
 	nrf_rpc_encode_uint(&ctx, callback_slot);
 
-	nrf_rpc_cbor_cmd_no_err(&bt_rpc_grp, BT_GATT_SUBSCRIBE_PARAMS_WRITE_RPC_CMD, &ctx,
+	nrf_rpc_cbor_cmd_no_err(&bt_rpc_grp, BT_GATT_SUBSCRIBE_PARAMS_SUBSCRIBE_RPC_CMD, &ctx,
 				nrf_rpc_rsp_decode_void, NULL);
 }
 
-NRF_RPC_CBKPROXY_HANDLER(bt_gatt_subscribe_params_write_encoder, bt_gatt_subscribe_params_write,
+NRF_RPC_CBKPROXY_HANDLER(bt_gatt_subscribe_params_subscribe_encoder, bt_gatt_subscribe_params_subscribe,
 			 (struct bt_conn *conn, uint8_t err, struct bt_gatt_write_params *params),
 			 (conn, err, params));
 
@@ -1515,8 +1515,8 @@ static void bt_gatt_subscribe_params_dec(struct nrf_rpc_cbor_ctx *ctx,
 					 struct bt_gatt_subscribe_params *data)
 {
 	data->notify = nrf_rpc_decode_bool(ctx) ? bt_gatt_subscribe_params_notify : NULL;
-	data->write = (bt_gatt_write_func_t)nrf_rpc_decode_callbackd(
-		ctx, bt_gatt_subscribe_params_write_encoder);
+	data->subscribe = (bt_gatt_subscribe_func_t)nrf_rpc_decode_callbackd(
+		ctx, bt_gatt_subscribe_params_subscribe_encoder);
 	data->value_handle = nrf_rpc_decode_uint(ctx);
 	data->ccc_handle = nrf_rpc_decode_uint(ctx);
 	data->value = nrf_rpc_decode_uint(ctx);
