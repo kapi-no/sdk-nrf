@@ -47,6 +47,27 @@ config DESKTOP_USB_PM_ENABLE
 	help
 	  This enables small module that blocks power down if the USB is active.
 
+if DESKTOP_USB_PM_ENABLE
+
+config DESKTOP_USB_PM_LOWER_FREQ_ON_SUSPENDED
+	bool "Use lower frequency in the USB suspended state [EXPERIMENTAL]"
+	depends on CLOCK_CONTROL
+	depends on NRFS_GDFS_SERVICE_ENABLED
+	select EXPERIMENTAL
+	default y
+	help
+	  This enables a small functionality that lowers the system frequency
+	  in the USB suspended state to limit the power consumption of the
+	  device. The USB specification requires the device to keep the power
+	  consumption below 2.5 mA in the USB suspended state. This feature
+	  enhances the available power budget that can be used for other
+	  activities such as radio operations.
+
+	  This feature is only supported on the nRF54H series which leverages
+	  the nrfs module its GDFS service.
+
+endif # DESKTOP_USB_PM_ENABLE
+
 config DESKTOP_USB_HID_REPORT_SENT_ON_SOF
 	bool "Submit HID report sent event on USB Start of Frame (SOF) [EXPERIMENTAL]"
 	select EXPERIMENTAL
