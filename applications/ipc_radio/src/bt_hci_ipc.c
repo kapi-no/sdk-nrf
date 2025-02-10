@@ -21,6 +21,10 @@
 #include <zephyr/bluetooth/buf.h>
 #include <zephyr/bluetooth/hci_raw.h>
 
+#include <zephyr/drivers/clock_control.h>
+#include <zephyr/drivers/clock_control/nrf_clock_control.h>
+#include <zephyr/sys/notify.h>
+
 #include <zephyr/ipc/ipc_service.h>
 
 #if defined(CONFIG_BT_HCI_VS_FATAL_ERROR)
@@ -53,6 +57,43 @@ enum hci_h4_type {
 
 #define HCI_FATAL_MSG true
 #define HCI_REGULAR_MSG false
+
+/* Defines for clock frequencies */
+#define FREQ_64_MHZ MHZ(64)
+#define FREQ_320_MHZ MHZ(320)
+
+/* Clock-related configurations */
+static const struct device *hsfll_dev = DEVICE_DT_GET(DT_NODELABEL(hsfll120));
+static struct nrf_clock_spec clk_spec_64mhz = { .frequency = FREQ_64_MHZ };
+static struct nrf_clock_spec clk_spec_320mhz = { .frequency = FREQ_320_MHZ };
+
+/* Bluetooth scanning state */
+static bool scanning_enabled = false; /* Tracks if scanning is enabled */
+
+/* Function to set the desired frequency asynchronously */
+static int set_frequency_async(const struct nrf_clock_spec *clk_spec)
+{
+	int err;
+	int res;
+	struct onoff_client cli;
+
+	LOG_INF("Requested frequency [Hz]: %d", clk_spec->frequency);
+	sys_notify_init_spinwait(&cli.notify);
+	err = nrf_clock_control_request(hsfll_dev, clk_spec, &cli);
+	LOG_INF("Return code: %d", err);
+	__ASSERT_NO_MSG(err < 3);
+	__ASSERT_NO_MSG(err >= 0);
+	do {
+		err = sys_notify_fetch_result(&cli.notify, &res);
+		k_yield();
+	} while (err == -EAGAIN);
+	LOG_INF("Clock control request return value: %d", err);
+	LOG_INF("Clock control request response code: %d", res);
+	__ASSERT_NO_MSG(err == 0);
+	__ASSERT_NO_MSG(res == 0);
+
+	return 0;
+}
 
 static void recv_cmd(const uint8_t *data, size_t len)
 {
@@ -165,6 +206,48 @@ static void recv_iso(const uint8_t *data, size_t len)
 	k_fifo_put(&tx_queue, buf);
 }
 
+/* Function to handle HCI events and detect scanning state changes */
+static void handle_hci_event(struct net_buf *buf)
+{
+	const struct bt_hci_evt_hdr *hdr = (void *)buf->data;
+
+	/* Pull HCI event data into a byte array */
+	const uint8_t *hci_evt_data = buf->data + sizeof(*hdr);
+
+	/* Check if the event is a Command Complete event (for Set Scan Enable) */
+	if (hdr->evt == BT_HCI_EVT_CMD_COMPLETE) {
+		LOG_HEXDUMP_DBG(buf->data, buf->len, "BT_HCI_EVT_CMD_COMPLETE:");
+		const struct bt_hci_evt_cmd_complete *cc_evt = (void *)hci_evt_data;
+		uint16_t opcode = sys_le16_to_cpu(cc_evt->opcode);
+
+		/* Detect HCI_LE_SET_SCAN_ENABLE_OP */
+		if (opcode == BT_OP(BT_OGF_LE, BT_HCI_OP_LE_SET_SCAN_ENABLE)) {
+			uint8_t status = *(hci_evt_data + sizeof(*cc_evt));
+
+			if (status != 0) {
+				LOG_ERR("Failed to set scan enable. Status: 0x%02X", status);
+				return;
+			}
+
+			/* Extract scan enable state (enable or disable) */
+			uint8_t scan_enable = *(hci_evt_data + sizeof(*cc_evt) + 1); /* Byte after the status field */
+			if (scan_enable) {
+				if (!scanning_enabled) {
+					scanning_enabled = true;
+					LOG_INF("BLE Scanning started. Setting frequency to 64 MHz.");
+					set_frequency_async(&clk_spec_64mhz);
+				}
+			} else {
+				if (scanning_enabled) {
+					scanning_enabled = false;
+					LOG_INF("BLE Scanning stopped. Setting frequency to 320 MHz.");
+					set_frequency_async(&clk_spec_320mhz);
+				}
+			}
+		}
+	}
+}
+
 static void send(struct net_buf *buf, bool is_fatal_err)
 {
 	uint8_t type;
@@ -180,6 +263,7 @@ static void send(struct net_buf *buf, bool is_fatal_err)
 		break;
 	case BT_BUF_EVT:
 		type = HCI_H4_EVT;
+		handle_hci_event(buf);
 		break;
 	case BT_BUF_ISO_IN:
 		type = HCI_H4_ISO;
@@ -210,7 +294,7 @@ static void send(struct net_buf *buf, bool is_fatal_err)
 		}
 	} while (ret < 0);
 
-	LOG_INF("Sent message of %d bytes.", ret);
+	LOG_DBG("Sent message of %d bytes.", ret);
 
 	net_buf_unref(buf);
 }
