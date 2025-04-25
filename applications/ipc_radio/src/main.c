@@ -15,6 +15,35 @@ LOG_MODULE_REGISTER(ipc_radio, CONFIG_IPC_RADIO_LOG_LEVEL);
 #error "No radio serialization selected."
 #endif
 
+#include <zephyr/init.h>
+
+#define GPIO0_BASE     0x418C0500UL
+#define GPIO0_DIRSET   (*(volatile uint32_t *)(GPIO0_BASE + 0x018))
+#define GPIO0_OUTSET   (*(volatile uint32_t *)(GPIO0_BASE + 0x008))
+#define GPIO0_OUTCLR   (*(volatile uint32_t *)(GPIO0_BASE + 0x00C))
+
+#define PIN_LED2       29
+
+static void delay_ms_200(void) {
+	volatile int count = 2500000;  // Adjust if needed
+	while (count--);
+}
+
+static int led_init(void)
+{
+	GPIO0_DIRSET = (1 << PIN_LED2);
+
+	GPIO0_OUTSET = (1 << PIN_LED2);
+	delay_ms_200();
+	GPIO0_OUTCLR = (1 << PIN_LED2);
+	delay_ms_200();
+	GPIO0_OUTSET = (1 << PIN_LED2);
+
+	return 0;
+}
+
+SYS_INIT(led_init, EARLY, 0);
+
 int main(void)
 {
 	int err;
