@@ -84,11 +84,44 @@ static void check_task(void *arg1, void *arg2, void *arg3)
 K_THREAD_DEFINE(thread_check_id, STACKSIZE, check_task, NULL, NULL, NULL,
 		K_PRIO_COOP(1), 0, -1);
 
+#include <zephyr/sys/reboot.h>
+#include <dk_buttons_and_leds.h>
+
+static void button_changed(uint32_t button_state, uint32_t has_changed)
+{
+	uint32_t buttons = button_state & has_changed;
+
+	if (buttons & DK_BTN4_MSK) {
+		sys_reboot(SYS_REBOOT_COLD);
+	}
+}
+
+static void dk_library_initialize(void)
+{
+	int err;
+
+	err = dk_leds_init();
+	if (err) {
+		printk("LEDs init failed (err %d)\n", err);
+	}
+
+	err = dk_buttons_init(button_changed);
+	if (err) {
+		printk("Buttons init failed (err: %d)\n", err);
+	}
+
+	printk("dk_library_initialize() done\n");
+}
+
 int main(void)
 {
 	const struct device *ipc0_instance;
 	struct ipc_ept ep;
 	int ret;
+
+	if (IS_ENABLED(CONFIG_DK_LIBRARY)) {
+		dk_library_initialize();
+	}
 
 	p_payload = (struct payload *) k_malloc(CONFIG_APP_IPC_SERVICE_MESSAGE_LEN);
 	if (!p_payload) {
