@@ -72,6 +72,7 @@ static struct k_work_delayable button_pressed;
 static enum state state;
 static atomic_t system_power_off = ATOMIC_INIT(false);
 
+static const struct gpio_dt_spec debug_pin0 = GPIO_DT_SPEC_GET(DT_ALIAS(debugpin0), gpios);
 
 static int get_gpio_idx(uint8_t port)
 {
@@ -310,6 +311,8 @@ static void scan_fn(struct k_work *work)
 	uint32_t raw_state[COLUMNS];
 	memset(raw_state, 0, sizeof(raw_state));
 
+	gpio_pin_set_dt(&debug_pin0, 0);
+
 	for (size_t i = 0; i < COLUMNS; i++) {
 		int err = set_cols(BIT(i));
 
@@ -428,6 +431,8 @@ static void scan_fn(struct k_work *work)
 		}
 
 	}
+
+	gpio_pin_set_dt(&debug_pin0, 1);
 
 	return;
 
@@ -693,3 +698,24 @@ APP_EVENT_SUBSCRIBE_EARLY(MODULE, power_down_event);
 APP_EVENT_SUBSCRIBE(MODULE, power_off_event);
 APP_EVENT_SUBSCRIBE(MODULE, wake_up_event);
 #endif
+
+static int debug_gpio_init(void)
+{
+	int ret;
+
+	if (!device_is_ready(debug_pin0.port)) {
+		LOG_ERR("led device %s is not ready",
+			debug_pin0.port->name);
+		return -1;
+	}
+
+	ret = gpio_pin_configure_dt(&debug_pin0, GPIO_OUTPUT_INACTIVE);
+	if (ret != 0) {
+		LOG_ERR("Error %d: failed to configure %s pin %d",
+			ret, debug_pin0.port->name, debug_pin0.pin);
+	}
+
+	return 0;
+}
+
+SYS_INIT(debug_gpio_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);

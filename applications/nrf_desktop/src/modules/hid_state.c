@@ -143,6 +143,10 @@ static uint8_t report_data_index[REPORT_ID_COUNT];
 static uint8_t report_state_index[REPORT_ID_COUNT];
 static struct hid_state state;
 
+#include <zephyr/device.h>
+#include <zephyr/drivers/gpio.h>
+
+static const struct gpio_dt_spec debug_pin1 = GPIO_DT_SPEC_GET(DT_ALIAS(debugpin1), gpios);
 
 static bool report_send(struct report_state *rs,
 			struct report_data *rd,
@@ -1419,6 +1423,8 @@ static bool handle_button_event(const struct button_event *event)
 	/* Get usage ID and target report from HID Keymap */
 	struct hid_keymap *map = hid_keymap_get(event->key_id);
 
+	gpio_pin_set_dt(&debug_pin1, 0);
+
 	if (!map || !map->usage_id) {
 		LOG_DBG("No mapping, button ignored");
 	} else {
@@ -1426,6 +1432,8 @@ static bool handle_button_event(const struct button_event *event)
 		int16_t value = (event->pressed != false) ? (1) : (-1);
 		update_key(map, value);
 	}
+
+	gpio_pin_set_dt(&debug_pin1, 1);
 
 	return false;
 }
@@ -1580,3 +1588,24 @@ APP_EVENT_SUBSCRIBE(MODULE, module_state_event);
 APP_EVENT_SUBSCRIBE_FINAL(MODULE, button_event);
 APP_EVENT_SUBSCRIBE(MODULE, motion_event);
 APP_EVENT_SUBSCRIBE(MODULE, wheel_event);
+
+static int debug_gpio_init(void)
+{
+	int ret;
+
+	if (!device_is_ready(debug_pin1.port)) {
+		LOG_ERR("led device %s is not ready",
+			debug_pin1.port->name);
+		return -1;
+	}
+
+	ret = gpio_pin_configure_dt(&debug_pin1, GPIO_OUTPUT_INACTIVE);
+	if (ret != 0) {
+		LOG_ERR("Error %d: failed to configure %s pin %d",
+			ret, debug_pin1.port->name, debug_pin1.pin);
+	}
+
+	return 0;
+}
+
+SYS_INIT(debug_gpio_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
