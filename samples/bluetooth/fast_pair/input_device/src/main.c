@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Nordic Semiconductor ASA
+ * Copyright (c) 2022-2025 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
@@ -10,6 +10,8 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/settings/settings.h>
+
+#include <bluetooth/services/fast_pair/adv_manager.h>
 #include <bluetooth/services/fast_pair/fast_pair.h>
 #include <bluetooth/adv_prov/fast_pair.h>
 
@@ -18,7 +20,6 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(fp_sample, LOG_LEVEL_INF);
 
-#include "bt_adv_helper.h"
 #include "hids_helper.h"
 #include "battery_module.h"
 
@@ -39,20 +40,30 @@ LOG_MODULE_REGISTER(fp_sample, LOG_LEVEL_INF);
 
 #define INIT_SEM_TIMEOUT_SECONDS				(60)
 
-static enum bt_fast_pair_adv_mode fp_adv_mode = BT_FAST_PAIR_ADV_MODE_DISC;
+static bool pairing_mode = true;
 static bool show_ui_pairing = true;
-static bool new_adv_session = true;
 static struct bt_conn *peer;
 
-static struct k_work bt_adv_restart;
-static struct k_work_delayable fp_adv_mode_status_led_handle;
-static struct k_work_delayable fp_disc_adv_timeout;
-
 static void init_work_handle(struct k_work *w);
+static void fp_adv_mode_status_led_work_handle(struct k_work *w);
+static void fp_disc_adv_timeout_work_handle(struct k_work *w);
 
 static K_SEM_DEFINE(init_work_sem, 0, 1);
 static K_WORK_DEFINE(init_work, init_work_handle);
+static K_WORK_DELAYABLE_DEFINE(fp_adv_mode_status_led_work, fp_adv_mode_status_led_work_handle);
+static K_WORK_DELAYABLE_DEFINE(fp_disc_adv_timeout_work, fp_disc_adv_timeout_work_handle);
 
+/* Trigger used to configure advertising in the discoverable mode (pairing mode). */
+BT_FAST_PAIR_ADV_MANAGER_TRIGGER_REGISTER(
+	fp_adv_trigger_pairing_mode,
+	"pairing_mode",
+	(&(const struct bt_fast_pair_adv_manager_trigger_config) {
+		.pairing_mode = true,
+		.suspend_rpa = true,
+	}));
+
+/* Trigger used to configure advertising in the not discoverable mode (subsequent connections). */
+BT_FAST_PAIR_ADV_MANAGER_TRIGGER_REGISTER(fp_adv_trigger_subsequent_mode, "subsequent_mode", NULL);
 
 static void bond_cnt_cb(const struct bt_bond_info *info, void *user_data)
 {
@@ -75,138 +86,113 @@ static bool can_pair(void)
 	return (bond_cnt() < CONFIG_BT_MAX_PAIRED);
 }
 
-static void advertising_stop(void)
+static bool adv_payload_update_required(void)
 {
-	int ret = k_work_cancel_delayable(&fp_disc_adv_timeout);
+	bool update_required;
+	static bool prev_pairing_mode = true;
+	static bool prev_show_ui_pairing = true;
 
-	__ASSERT_NO_MSG((ret & ~(K_WORK_CANCELING)) == 0);
-
-	ret = bt_adv_helper_adv_stop();
-	if (ret) {
-		LOG_ERR("Failed to stop advertising (err %d)", ret);
+	if ((prev_pairing_mode == pairing_mode) &&
+	    (prev_show_ui_pairing != show_ui_pairing) &&
+	    (peer == NULL)) {
+		update_required = true;
+	} else {
+		update_required = false;
 	}
+
+	prev_pairing_mode = pairing_mode;
+	prev_show_ui_pairing = show_ui_pairing;
+
+	return update_required;
 }
 
-static void advertising_start(void)
+static void triggers_clear(void)
 {
-	int err;
-	int ret;
+	bt_fast_pair_adv_manager_request(&fp_adv_trigger_pairing_mode, false);
+	bt_fast_pair_adv_manager_request(&fp_adv_trigger_subsequent_mode, false);
+}
 
-	ARG_UNUSED(ret);
-
+static void triggers_update(void)
+{
 	if (!can_pair()) {
-		if ((fp_adv_mode == BT_FAST_PAIR_ADV_MODE_DISC) || show_ui_pairing) {
+		if ((bt_fast_pair_adv_manager_is_pairing_mode()) || show_ui_pairing) {
+			int ret;
+
+			ARG_UNUSED(ret);
+
 			LOG_INF("Automatically switching to not discoverable advertising, hide UI "
 				"indication, because all bond slots are taken");
-			fp_adv_mode = BT_FAST_PAIR_ADV_MODE_NOT_DISC;
-			show_ui_pairing = false;
 
-			ret = k_work_reschedule(&fp_adv_mode_status_led_handle, K_NO_WAIT);
+			show_ui_pairing = false;
+			pairing_mode = false;
+
+			ret = k_work_reschedule(&fp_adv_mode_status_led_work, K_NO_WAIT);
 			__ASSERT_NO_MSG((ret == 0) || (ret == 1));
 		}
 	}
 
 	bt_le_adv_prov_fast_pair_show_ui_pairing(show_ui_pairing);
 
-	err = bt_adv_helper_adv_start((fp_adv_mode == BT_FAST_PAIR_ADV_MODE_DISC), new_adv_session);
+	bt_fast_pair_adv_manager_request(&fp_adv_trigger_pairing_mode, pairing_mode);
+	bt_fast_pair_adv_manager_request(&fp_adv_trigger_subsequent_mode, !pairing_mode);
 
-	new_adv_session = false;
-
-	ret = k_work_cancel_delayable(&fp_disc_adv_timeout);
-
-	/* The advertising_start function may be called from discoverable advertising timeout work
-	 * handler. In that case work would initially be in a running state.
-	 */
-	__ASSERT_NO_MSG((ret & ~(K_WORK_RUNNING | K_WORK_CANCELING)) == 0);
-
-	if ((fp_adv_mode == BT_FAST_PAIR_ADV_MODE_DISC) && !err) {
-		ret = k_work_reschedule(&fp_disc_adv_timeout,
-					K_MINUTES(FP_DISC_ADV_TIMEOUT_MINUTES));
-
-		__ASSERT_NO_MSG(ret == 1);
+	if (adv_payload_update_required()) {
+		bt_fast_pair_adv_manager_payload_refresh();
 	}
 
-	if (!err) {
-		if (fp_adv_mode == BT_FAST_PAIR_ADV_MODE_DISC) {
-			LOG_INF("Discoverable advertising started");
-		} else {
-			LOG_INF("Not discoverable advertising started, %s UI indication enabled",
-				show_ui_pairing ? "show" : "hide");
-		}
+	if (pairing_mode) {
+		LOG_INF("Triggers configured for discoverable mode");
 	} else {
-		LOG_ERR("Advertising failed to start (err %d)", err);
+		LOG_INF("Triggers configured for not discoverable mode, %s UI indication enabled",
+			show_ui_pairing ? "show" : "hide");
+
+		(void) k_work_cancel_delayable(&fp_disc_adv_timeout_work);
 	}
 }
 
-static void bt_adv_restart_fn(struct k_work *w)
+static void fp_adv_mode_status_led_work_handle(struct k_work *w)
 {
-	advertising_start();
-}
-
-static void fp_adv_mode_status_led_handle_fn(struct k_work *w)
-{
-	ARG_UNUSED(w);
-
-	static bool led_on = true;
 	int ret;
+	static bool led_on = true;
 
 	ARG_UNUSED(ret);
+	ARG_UNUSED(w);
 
-	switch (fp_adv_mode) {
-	case BT_FAST_PAIR_ADV_MODE_DISC:
+	if (bt_fast_pair_adv_manager_is_pairing_mode()) {
+		/* Discoverable mode. */
 		dk_set_led_on(FP_ADV_MODE_STATUS_LED);
-		break;
-
-	case BT_FAST_PAIR_ADV_MODE_NOT_DISC:
-		dk_set_led(FP_ADV_MODE_STATUS_LED, led_on);
-		led_on = !led_on;
-		ret = k_work_reschedule(&fp_adv_mode_status_led_handle, show_ui_pairing ?
-				K_MSEC(FP_ADV_MODE_SHOW_UI_INDICATION_LED_BLINK_INTERVAL_MS) :
-				K_MSEC(FP_ADV_MODE_HIDE_UI_INDICATION_LED_BLINK_INTERVAL_MS));
-		__ASSERT_NO_MSG(ret == 1);
-		break;
-
-	default:
-		__ASSERT_NO_MSG(false);
+		return;
 	}
+
+	/* Not discoverable mode. */
+	dk_set_led(FP_ADV_MODE_STATUS_LED, led_on);
+	led_on = !led_on;
+
+	ret = k_work_reschedule(&fp_adv_mode_status_led_work, show_ui_pairing ?
+			K_MSEC(FP_ADV_MODE_SHOW_UI_INDICATION_LED_BLINK_INTERVAL_MS) :
+			K_MSEC(FP_ADV_MODE_HIDE_UI_INDICATION_LED_BLINK_INTERVAL_MS));
+	__ASSERT_NO_MSG(ret == 1);
 }
 
-static void fp_disc_adv_timeout_fn(struct k_work *w)
+static void fp_disc_adv_timeout_work_handle(struct k_work *w)
 {
 	ARG_UNUSED(w);
 
-	__ASSERT_NO_MSG(fp_adv_mode == BT_FAST_PAIR_ADV_MODE_DISC);
+	__ASSERT_NO_MSG(pairing_mode);
 	__ASSERT_NO_MSG(!peer);
 
 	LOG_INF("Discoverable advertising timed out");
 
 	/* Switch to not discoverable advertising showing UI indication. */
-	fp_adv_mode = BT_FAST_PAIR_ADV_MODE_NOT_DISC;
+	pairing_mode = false;
 	show_ui_pairing = true;
 
-	fp_adv_mode_status_led_handle_fn(NULL);
-	advertising_start();
+	fp_adv_mode_status_led_work_handle(NULL);
+	triggers_update();
 }
 
 static void connected(struct bt_conn *conn, uint8_t err)
 {
-	int ret = k_work_cancel_delayable(&fp_disc_adv_timeout);
-
-	__ASSERT_NO_MSG(ret == 0);
-	ret = k_work_cancel(&bt_adv_restart);
-	__ASSERT_NO_MSG(ret == 0);
-	ARG_UNUSED(ret);
-
-	/* Multiple simultaneous connections are not supported by the sample. */
-	__ASSERT_NO_MSG(!peer);
-
-	if (err) {
-		LOG_WRN("Connection failed, err 0x%02x %s", err, bt_hci_err_to_str(err));
-		ret = k_work_submit(&bt_adv_restart);
-		__ASSERT_NO_MSG(ret == 1);
-		return;
-	}
-
 	LOG_INF("Connected");
 
 	dk_set_led_on(CON_STATUS_LED);
@@ -219,13 +205,6 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 
 	dk_set_led_off(CON_STATUS_LED);
 	peer = NULL;
-
-	int ret = k_work_submit(&bt_adv_restart);
-
-	__ASSERT_NO_MSG(ret == 1);
-	ARG_UNUSED(ret);
-
-	new_adv_session = true;
 }
 
 static void security_changed(struct bt_conn *conn, bt_security_t level, enum bt_security_err err)
@@ -250,11 +229,15 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 
 static void pairing_complete(struct bt_conn *conn, bool bonded)
 {
-	if (bonded && (fp_adv_mode == BT_FAST_PAIR_ADV_MODE_DISC)) {
-		fp_adv_mode = BT_FAST_PAIR_ADV_MODE_NOT_DISC;
-		show_ui_pairing = true;
-		int ret = k_work_reschedule(&fp_adv_mode_status_led_handle, K_NO_WAIT);
+	if (bonded && (bt_fast_pair_adv_manager_is_pairing_mode())) {
+		int ret;
 
+		pairing_mode = false;
+		show_ui_pairing = true;
+
+		triggers_update();
+
+		ret = k_work_reschedule(&fp_adv_mode_status_led_work, K_NO_WAIT);
 		__ASSERT_NO_MSG((ret == 0) || (ret == 1));
 		ARG_UNUSED(ret);
 	}
@@ -268,7 +251,7 @@ static enum bt_security_err pairing_accept(struct bt_conn *conn,
 
 	enum bt_security_err ret;
 
-	if (fp_adv_mode != BT_FAST_PAIR_ADV_MODE_DISC) {
+	if (pairing_mode) {
 		LOG_WRN("Normal Bluetooth pairing not allowed outside of pairing mode");
 		ret = BT_SECURITY_ERR_PAIR_NOT_ALLOWED;
 	} else {
@@ -350,24 +333,22 @@ static void fp_adv_mode_btn_handle(uint32_t button_state, uint32_t has_changed)
 	uint32_t button_pressed = button_state & has_changed;
 
 	if (button_pressed & FP_ADV_MODE_BUTTON_MASK) {
-		if (fp_adv_mode == BT_FAST_PAIR_ADV_MODE_DISC) {
-			fp_adv_mode = BT_FAST_PAIR_ADV_MODE_NOT_DISC;
+		int ret;
+
+		if (pairing_mode) {
+			pairing_mode = false;
 			show_ui_pairing = true;
 		} else {
 			if (show_ui_pairing) {
 				show_ui_pairing = false;
 			} else {
-				fp_adv_mode = BT_FAST_PAIR_ADV_MODE_DISC;
+				pairing_mode = true;
 			}
 		}
 
-		if (!peer) {
-			new_adv_session = true;
-			advertising_start();
-		}
+		triggers_update();
 
-		int ret = k_work_reschedule(&fp_adv_mode_status_led_handle, K_NO_WAIT);
-
+		ret = k_work_reschedule(&fp_adv_mode_status_led_work, K_NO_WAIT);
 		__ASSERT_NO_MSG((ret == 0) || (ret == 1));
 		ARG_UNUSED(ret);
 	}
@@ -378,20 +359,18 @@ static void bond_remove_btn_handle(uint32_t button_state, uint32_t has_changed)
 	uint32_t button_pressed = button_state & has_changed;
 
 	if (button_pressed & BOND_REMOVE_BUTTON_MASK) {
-		advertising_stop();
+		int err;
 
-		int err = bt_unpair(BT_ID_DEFAULT, NULL);
+		triggers_clear();
 
+		err = bt_unpair(BT_ID_DEFAULT, NULL);
 		if (err) {
 			LOG_ERR("Cannot remove bonds (err %d)", err);
 		} else {
 			LOG_INF("Bonds removed");
 		}
 
-		if (!peer) {
-			new_adv_session = true;
-			advertising_start();
-		}
+		triggers_update();
 	}
 }
 
@@ -410,9 +389,29 @@ static void fp_account_key_written(struct bt_conn *conn)
 	LOG_INF("Fast Pair Account Key has been written");
 }
 
+static void fp_adv_state_changed(bool active)
+{
+	if (!bt_fast_pair_adv_manager_is_pairing_mode()) {
+		/* The advertising does not use the Fast Pair discoverable mode.*/
+		return;
+	}
+
+	if (!active) {
+		(void) k_work_cancel_delayable(&fp_disc_adv_timeout_work);
+	} else {
+		(void) k_work_reschedule(&fp_disc_adv_timeout_work,
+					 K_MINUTES(FP_DISC_ADV_TIMEOUT_MINUTES));
+	}
+}
+
+static struct bt_fast_pair_adv_manager_info_cb fp_adv_info_cb = {
+	.adv_state_changed = fp_adv_state_changed,
+};
+
 static void init_work_handle(struct k_work *w)
 {
 	int err;
+	int ret;
 	static const struct bt_conn_auth_cb conn_auth_callbacks = {
 		.pairing_accept = pairing_accept,
 	};
@@ -426,6 +425,18 @@ static void init_work_handle(struct k_work *w)
 	/* It is assumed that this function executes in the cooperative thread context. */
 	__ASSERT_NO_MSG(!k_is_preempt_thread());
 	__ASSERT_NO_MSG(!k_is_in_isr());
+
+	err = dk_leds_init();
+	if (err) {
+		LOG_ERR("LEDs init failed (err %d)", err);
+		return;
+	}
+
+	err = dk_buttons_init(button_changed);
+	if (err) {
+		LOG_ERR("Buttons init failed (err %d)", err);
+		return;
+	}
 
 	err = bt_conn_auth_cb_register(&conn_auth_callbacks);
 	if (err) {
@@ -473,12 +484,6 @@ static void init_work_handle(struct k_work *w)
 		return;
 	}
 
-	err = dk_leds_init();
-	if (err) {
-		LOG_ERR("LEDs init failed (err %d)", err);
-		return;
-	}
-
 	err = battery_module_init();
 	if (err) {
 		LOG_ERR("Battery module init failed (err %d)", err);
@@ -491,22 +496,24 @@ static void init_work_handle(struct k_work *w)
 		return;
 	}
 
-	k_work_init(&bt_adv_restart, bt_adv_restart_fn);
-	k_work_init_delayable(&fp_adv_mode_status_led_handle, fp_adv_mode_status_led_handle_fn);
-	k_work_init_delayable(&fp_disc_adv_timeout, fp_disc_adv_timeout_fn);
-
-	int ret = k_work_schedule(&fp_adv_mode_status_led_handle, K_NO_WAIT);
-
-	__ASSERT_NO_MSG(ret == 1);
-	ret = k_work_submit(&bt_adv_restart);
-	__ASSERT_NO_MSG(ret == 1);
-	ARG_UNUSED(ret);
-
-	err = dk_buttons_init(button_changed);
+	err = bt_fast_pair_adv_manager_info_cb_register(&fp_adv_info_cb);
 	if (err) {
-		LOG_ERR("Buttons init failed (err %d)", err);
+		LOG_ERR("Registering Fast Pair Advertising Manager callbacks failed (err %d)",
+			err);
 		return;
 	}
+
+	triggers_update();
+
+	err = bt_fast_pair_adv_manager_enable();
+	if (err) {
+		LOG_ERR("Fast Pair Advertising Manager enable failed failed (err %d)", err);
+		return;
+	}
+
+	ret = k_work_schedule(&fp_adv_mode_status_led_work, K_NO_WAIT);
+	__ASSERT_NO_MSG(ret == 1);
+	ARG_UNUSED(ret);
 
 	k_sem_give(&init_work_sem);
 }
