@@ -8,8 +8,16 @@
 
 / {
 	chosen {
-		zephyr,code-partition = &boot_partition;
+		zephyr,code-partition = &cpuapp_boot_partition;
 	};
+};
+
+slot0_partition: &cpuapp_slot0_partition {
+	label = "image-0";
+};
+
+slot1_partition: &cpuapp_slot1_partition {
+	label = "image-1";
 };
 
 /*
