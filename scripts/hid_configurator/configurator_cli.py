@@ -7,6 +7,8 @@ import argparse
 import logging
 import os
 import pprint
+import sys
+import time
 
 if os.name == "nt":
     try:
@@ -194,6 +196,19 @@ def perform_led_stream(dev, args):
         send_continuous_led_stream(dev, args.led_id, args.freq)
 
 
+def perform_test(dev, args):
+    total_tx_bytes = 0
+    count = 0
+    start_time = time.time()
+    while True:
+        info = fwinfo(dev)
+        if info is not None:
+            total_tx_bytes += 30  # 30 bytes sent per exchange
+            count += 1
+        elapsed_time = time.time() - (locals().get('start_time', time.time()))
+        sys.stdout.write(f"Total transfers: {count} | Total TX[B]: {total_tx_bytes} | Elapsed[s]: {elapsed_time:.1f}\r")
+        sys.stdout.flush()
+
 def parse_arguments():
     parser = argparse.ArgumentParser(allow_abbrev=False)
 
@@ -222,6 +237,7 @@ def parse_arguments():
     parser_stream.add_argument('led_id', type=int, help='Stream LED ID')
     parser_stream.add_argument('freq', type=int, help='Color change frequency (in Hz)')
     parser_stream.add_argument('--file', type=str, help='Selected audio file (*.wav)')
+    parser_test = sp_commands.add_parser('test', help='Test transferring fwupd information in a loop')
 
     assert isinstance(MODULE_CONFIG, dict)
     parser_config = sp_commands.add_parser('config',
@@ -294,7 +310,8 @@ configurator.ALLOWED_COMMANDS = {
     'devinfo' : perform_devinfo,
     'fwreboot' : perform_fwreboot,
     'config' : perform_config,
-    'led_stream' : perform_led_stream
+    'led_stream' : perform_led_stream,
+    'test' : perform_test
 }
 
 
