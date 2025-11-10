@@ -1,0 +1,122 @@
+/*
+ * Copyright (c) 2025 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+&cpuapp_rram {
+	/* Application does not use cpuflpr core. Assign whole RRAM to cpuapp. */
+	reg = < 0x0 DT_SIZE_K(2036) >;
+
+	/* Redefine the "partitions" DTS node. */
+	/delete-node/ partitions;
+
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		/* Significantly increase the size of the MCUboot partition to make it fit
+		 * for the LLVM configuration variant.
+		 */
+		boot_partition: partition@0 {
+			label = "mcuboot";
+			reg = <0x0 DT_SIZE_K(48)>;
+		};
+
+		slot0_partition: partition@c000 {
+			label = "image-0";
+			reg = <0xc000 DT_SIZE_K(984)>;
+		};
+
+		slot1_partition: partition@102000 {
+			label = "image-1";
+			reg = <0x102000 DT_SIZE_K(984)>;
+		};
+
+		storage_partition: partition@1f8000 {
+			label = "storage";
+			reg = <0x1f8000 DT_SIZE_K(20)>;
+		};
+	};
+};
+
+/ {
+	soc {
+		/* Redefine the "cpuapp_sram" DTS node and specify the necessary RAM subregions
+		 * that can be used to configure the MCUboot image. This DTS node must be assigned
+		 * to the application image as its chosen SRAM DTS node. The build system places
+		 * the executable ROM section (code) at the beginning of this region and the RAM
+		 * section (data) right after the ROM section. The usage of this SRAM region should
+		 * not be close to the maximum size of this region (100%), as the System Heap is
+		 * located in the unused part of this region. It is recommended to have at least
+		 * 1kB of unused space.
+		 */
+		cpuapp_sram: memory@20000000 {
+			compatible = "mmio-sram";
+			reg = <0x20000000 DT_SIZE_K(510)>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges = <0x0 0x20000000 DT_SIZE_K(510)>;
+
+			/* SRAM region for storing the ROM section (code) and RAM section (data) of
+			 * the application image. The RAM section of the application image may also
+			 * partially or fully fill the subsequent SRAM region called
+			 * "cpuapp_sram_mcuboot_ram_region", but its ROM section must never fill
+			 * this region. It is recommended to use this DTS node for configuration
+			 * of the executable SRAM region in the MCUboot image. This RAM region
+			 * should be aligned with the following Kconfig options in MCUboot:
+			 * - CONFIG_BOOT_IMAGE_EXECUTABLE_RAM_START
+			 * - CONFIG_BOOT_IMAGE_EXECUTABLE_RAM_SIZE
+			 */
+			cpuapp_sram_app_rxm_region: memory@0 {
+				compatible = "mmio-sram";
+				reg = <0x0 DT_SIZE_K(490)>;
+				#address-cells = <1>;
+				#size-cells = <1>;
+				ranges = <0x0 0x0 DT_SIZE_K(490)>;
+			};
+
+			/* SRAM region for storing the RAM section (data) of the MCUboot image. The
+			 * RAM section of the application image may also partially or fully fill
+			 * this region, but the ROM section of the application image must never
+			 * fill this region. This DTS node must be assigned to the MCUboot image
+			 * as its chosen SRAM DTS node. The usage of this SRAM region should not
+			 * be close to the maximum size of this region (100%), as the System Heap
+			 * is located in the unused part of this region. It is recommended to have
+			 * at least 1kB of unused space.
+			 */
+			cpuapp_sram_mcuboot_ram_region: memory@7a800 {
+				compatible = "mmio-sram";
+				reg = <0x7a800 DT_SIZE_K(20)>;
+				#address-cells = <1>;
+				#size-cells = <1>;
+				ranges = <0x0 0x7a800 DT_SIZE_K(20)>;
+			};
+		};
+
+		/* SRAM region that is retained across reboots. This region is shared by both the
+		 * MCUboot image and the application code. Currently, it is used to share the image
+		 * metadata between the bootloader and the application.
+		 */
+		cpuapp_sram_retained_mem_region: memory@2007f800 {
+			compatible = "zephyr,memory-region", "mmio-sram";
+			reg = <0x2007f800 DT_SIZE_K(1)>;
+			zephyr,memory-region = "RetainedMem";
+			status = "okay";
+
+			retainedmem {
+				compatible = "zephyr,retained-ram";
+				status = "okay";
+				#address-cells = <1>;
+				#size-cells = <1>;
+
+				boot_info0: boot_info@0 {
+					compatible = "zephyr,retention";
+					status = "okay";
+					reg = <0x0 0x100>;
+				};
+			};
+		};
+	};
+};
