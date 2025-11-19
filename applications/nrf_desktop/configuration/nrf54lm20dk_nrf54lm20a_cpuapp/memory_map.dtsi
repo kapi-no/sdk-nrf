@@ -118,5 +118,18 @@
 				};
 			};
 		};
+
+		reserved-memory {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges;
+
+			nrf_kmu_reserved_push_area: memory@2007fc00 {
+				reg = <0x2007fc00 0x40>;
+				compatible = "zephyr,memory-region", "mmio-sram";
+				zephyr,memory-region = "nrf_kmu_reserved_push_area";
+				status = "okay";
+			};
+		};
 	};
 };
