@@ -151,7 +151,7 @@ static enum bt_security_err pairing_accept(struct bt_conn *conn,
 
 	LOG_WRN("Normal Bluetooth pairing not allowed");
 
-	return BT_SECURITY_ERR_PAIR_NOT_ALLOWED;
+	return BT_SECURITY_ERR_SUCCESS;
 }
 
 static const struct bt_conn_auth_cb conn_auth_callbacks = {

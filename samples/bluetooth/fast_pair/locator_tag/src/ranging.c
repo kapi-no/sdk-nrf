@@ -821,13 +821,27 @@ static struct bt_fast_pair_fhn_pf_ranging_mgmt_cb ranging_mgmt_cb = {
 
 static void ranging_connected(struct bt_conn *conn, uint8_t conn_err)
 {
+	int err;
 	struct mgmt_conn *mgmt_conn = mgmt_conn_get(conn);
+	const struct bt_le_cs_set_default_settings_param default_settings = {
+		.enable_initiator_role = false,
+		.enable_reflector_role = true,
+		.cs_sync_antenna_selection = BT_LE_CS_ANTENNA_SELECTION_OPT_REPETITIVE,
+		.max_tx_power = BT_HCI_OP_LE_CS_MAX_MAX_TX_POWER,
+	};
 
 	if (conn_err) {
 		return;
 	}
 
 	mgmt_conn->conn = conn;
+
+	/* Start setting up ranging using BLE CS. */
+	err = bt_le_cs_set_default_settings(conn, &default_settings);
+	if (err) {
+		LOG_ERR("Ranging: BLE CS: failed to set default settings (err %d)", err);
+		return;
+	}
 }
 
 static void ranging_disconnected(struct bt_conn *conn, uint8_t reason)

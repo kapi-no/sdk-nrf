@@ -1234,8 +1234,19 @@ static void fhn_post_init_work_handle(struct k_work *work)
 	/* Check the provisioning state. */
 	is_provisioned = bt_fast_pair_fhn_is_provisioned();
 
-	if (is_provisioned) {
+	if (!is_provisioned) {
 		int err;
+
+		/* Set the new advertising payload in the Bluetooth stack. */
+		err = bt_le_ext_adv_set_data(fhn_adv_set,
+			fhn_frame_data,
+			ARRAY_SIZE(fhn_frame_data),
+			NULL,
+			0);
+		if (err) {
+			LOG_ERR("FHN State: bt_le_ext_adv_set_data returned error: %d", err);
+			return;
+		}
 
 		err = fhn_adv_set_rotate();
 		if (err) {
