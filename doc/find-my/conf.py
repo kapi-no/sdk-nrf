@@ -75,6 +75,8 @@ extensions = [
     "ncs_cache",
     "zephyr.external_content",
     "zephyr.doxyrunner",
+    "sphinx_tabs.tabs",
+    "sphinxcontrib.plantuml",
 ]
 master_doc = "index"
 
