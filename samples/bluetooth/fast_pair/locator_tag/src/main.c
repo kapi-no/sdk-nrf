@@ -5,6 +5,7 @@
  */
 
 #include <zephyr/settings/settings.h>
+#include <zephyr/fs/zms.h>
 #include <zephyr/kernel.h>
 
 #include <zephyr/bluetooth/conn.h>
@@ -89,6 +90,45 @@ static void init_work_handle(struct k_work *w);
 static K_SEM_DEFINE(init_work_sem, 0, 1);
 static K_WORK_DEFINE(init_work, init_work_handle);
 
+static void storage_space_print(void)
+{
+	int err;
+	struct zms_fs *fs = NULL;
+	ssize_t free_space;
+	ssize_t used_space;
+
+	err = settings_storage_get((void **) &fs);
+	if (err) {
+		LOG_ERR("Failed to get storage free space: err=%d", err);
+		return;
+	}
+	__ASSERT_NO_MSG(fs != NULL);
+
+	free_space = zms_calc_free_space(fs);
+	if (free_space < 0) {
+		LOG_ERR("Failed to get storage free space: err=%d", free_space);
+		return;
+	}
+
+	LOG_INF("Storage free space: %d [B]", free_space);
+
+	used_space = fs->sector_size * fs->sector_count;
+	used_space -= fs->sector_size; // one sector is reserved for garbage collection
+	used_space -= ((3 * fs->ate_size) * (fs->sector_count - 1)); // 3 ATEs are reserved for the header (close, empty, gc_done) in all remaining writable sectors
+	used_space -= ((fs->ate_size) * (fs->sector_count - 1)); // one ATE is reserved for the delete operation per each sector
+	used_space -= ((fs->ate_size) * (fs->sector_count - 1)); // one ATE size is reserved for 0xFF to separate the ATE and data sections.
+	used_space -= free_space; // used space that is actively used by the settins subsystem.
+
+	LOG_INF("Storage space by Settings subsystem: %d [B]", used_space);
+}
+
+static void storage_space_print_bootup_work_handle(struct k_work *w)
+{
+	storage_space_print();
+}
+
+static K_WORK_DELAYABLE_DEFINE(storage_space_print_bootup_work, storage_space_print_bootup_work_handle);
+
 static void fhn_provisioning_state_set(bool provisioned)
 {
 	__ASSERT_NO_MSG(bt_fast_pair_is_ready());
@@ -149,9 +189,9 @@ static enum bt_security_err pairing_accept(struct bt_conn *conn,
 	 * only accept Fast Pair pairing.
 	 */
 
-	LOG_WRN("Normal Bluetooth pairing not allowed");
+	LOG_WRN("Normal Bluetooth pairing is allowed");
 
-	return BT_SECURITY_ERR_PAIR_NOT_ALLOWED;
+	return BT_SECURITY_ERR_SUCCESS;
 }
 
 static const struct bt_conn_auth_cb conn_auth_callbacks = {
@@ -445,6 +485,8 @@ static void security_changed(struct bt_conn *conn, bt_security_t level, enum bt_
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	fhn_conn_auth_bm_conn_status_set(conn, false);
+
+	storage_space_print();
 }
 
 BT_CONN_CB_DEFINE(conn_callbacks) = {
@@ -757,6 +799,8 @@ int main(void)
 	LOG_INF("Sample has started");
 
 	app_ui_state_change_indicate(APP_UI_STATE_APP_RUNNING, true);
+
+	k_work_reschedule(&storage_space_print_bootup_work, K_SECONDS(10));
 
 	return 0;
 }
